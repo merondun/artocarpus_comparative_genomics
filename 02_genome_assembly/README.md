@@ -6,11 +6,11 @@ The primary outputs of this section are assemblies.... and repeat figures.
 
 Assemblies & kmer histograms:
 
-![genomes](figures/20260409_Primary_Final_Contacts_Histos.png)
+![genomes](/figures/20260409_Primary_Final_Contacts_Histos.png)
 
 Repeat analyses:
 
-![repeats](figures/20260410_repeats.png))
+![repeats](/figures/20260410_repeats.png))
 ___
 
 ## Puzzler Assembly
