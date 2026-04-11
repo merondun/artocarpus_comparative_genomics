@@ -10,7 +10,7 @@ Assemblies & kmer histograms:
 
 Repeat analyses:
 
-![repeats](/figures/20260410_repeats.png))
+![repeats](/figures/20260410_repeats.png)
 ___
 
 ## Puzzler Assembly
