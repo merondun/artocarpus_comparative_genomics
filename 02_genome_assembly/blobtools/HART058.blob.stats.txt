@@ -1,0 +1,15 @@
+## 1.1.1
+## bam0=/project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/HART058/06_realign_hic_hifi/asm.hifi.bam
+# name	colour	count_visible	count_visible_perc	span_visible	span_visible_perc	n50	gc_mean	gc_std	bam0_mean	bam0_std	bam0_read_map	bam0_read_map_p
+all	None	248	100.0%	872,709,492	100.0%	30,656,079	0.51	0.11	123.7	295.2	6,007,484	54.8%
+Streptophyta	#1f77b4	163	100.0%	868,080,638	100.0%	30,656,079	0.48	0.088	185.7	348.1	6,005,742	54.8%
+Actinomycetota	#ff7f0e	34	100.0%	1,877,119	100.0%	56,445	0.68	0.017	2.0	0.5	369	0.0%
+Basidiomycota	#d62728	23	100.0%	1,234,633	100.0%	57,116	0.41	0.017	1.7	1.0	192	0.0%
+Pseudomonadota	#9467bd	14	100.0%	897,027	100.0%	82,841	0.68	0.024	1.6	0.4	146	0.0%
+Arthropoda	#e377c2	4	100.0%	178,278	100.0%	51,067	0.38	0.015	25.6	8.8	434	0.0%
+no-hit	#d3d3d3	3	100.0%	170,893	100.0%	94,346	0.45	0.08	50.7	68.3	506	0.0%
+Rotifera	#7f7f7f	2	100.0%	89,340	100.0%	48,341	0.45	0.0081	1.0	0.2	9	0.0%
+Uroviricota	#bcbd22	2	100.0%	87,296	100.0%	55,138	0.54	0.047	2.7	1.2	27	0.0%
+other	#ffffff	3	100.0%	94,268	100.0%	29,460	0.34	0.06	6.1	1.4	59	0.0%
+Mollusca	None	2	100.0%	65,334	100.0%	35,874	0.38	0.0011	6.5	1.5	44	0.0%
+Ascomycota	None	1	100.0%	28,934	100.0%	28,934	0.26	0.0	5.1	0.0	15	0.0%

@@ -1,0 +1,23 @@
+#	y,	xstart,	xend,	rotation,	color,	label,	va,	bed
+	0.92,	0.2,	0.95,	0,	,	HART001,	top,	HART001.bed
+	0.83,	0.2,	0.95,	0,	,	HART067,	top,	HART067.bed
+	0.75,	0.2,	0.95,	0,	,	HART063,	top,	HART063.bed
+	0.67,	0.2,	0.95,	0,	,	HART061,	top,	HART061.bed
+	0.58,	0.2,	0.95,	0,	,	HART062,	top,	HART062.bed
+	0.5,	0.2,	0.95,	0,	,	HART058,	top,	HART058.bed
+	0.42,	0.2,	0.95,	0,	,	HART027,	top,	HART027.bed
+	0.33,	0.2,	0.95,	0,	,	HART060,	top,	HART060.bed
+	0.25,	0.2,	0.95,	0,	,	N97_50,	top,	N97_50.bed
+	0.17,	0.2,	0.95,	0,	,	HART068,	top,	HART068.bed
+	0.08,	0.2,	0.95,	0,	,	N15_23,	bottom,	N15_23.bed
+#	edges							
+e,	0,	1,	HART001-HART067.cols.simple					
+e,	1,	2,	HART067-HART063.cols.simple					
+e,	2,	3,	HART063-HART061.cols.simple					
+e,	3,	4,	HART061-HART062.cols.simple					
+e,	4,	5,	HART062-HART058.cols.simple					
+e,	5,	6,	HART058-HART027.cols.simple					
+e,	6,	7,	HART027-HART060.cols.simple					
+e,	7,	8,	HART060-N97_50.cols.simple					
+e,	8,	9,	N97_50-HART068.cols.simple					
+e,	9,	10,	HART068-N15_23.cols.simple					

@@ -1,0 +1,70 @@
+[SPECIES]
+focal_species = arto
+# informal name of the focal species from the input tree
+
+newick_tree = ((arto, bato), morus);
+# input phylogenetic tree in newick format; use the informal names
+
+latin_names =       arto    : Artocarpus altilis, 
+                    bato     : Batocarpus spp,
+                    morus : Morus spp
+# informal names associated to their latin name through a colon and separated by comma
+
+fasta_filenames =   arto    : sequences/Artocarpus.fa, 
+                    bato     : sequences/Batocarpus.fa, 
+                    morus : sequences/Morus.fa
+gff_filename = sequences/Artocarpus.gff3
+# informal names associated to their filename/path through a colon and separated by comma
+
+peak_database_path = ortholog_peak_db.tsv
+ks_list_database_path = ortholog_ks_list_db.tsv
+# filenames/paths of the ortholog data databases
+
+
+[ANALYSIS SETTING]
+paranome = yes
+collinearity = yes
+reciprocal_retention = no
+# analysis type for paralog data; allowed values: 'yes' or 'no'
+
+gff_feature = transcript
+# keyword to parse the sequence type from the gff file (column 3); can be 'gene', 'mrna'...
+
+gff_attribute = ID
+# keyword to parse gene id from the gff file (column 9); can be 'id', 'name'...
+
+max_number_outgroups = 4
+# maximum number of outspecies/trios selected to correct each divergent species pair (default: 4)
+
+consensus_mode_for_multiple_outgroups = mean among outgroups
+# allowed values: 'mean among outgroups' or 'best outgroup' (default: 'mean among outgroups')
+
+
+[PARAMETERS]
+x_axis_max_limit_paralogs_plot = 2
+# highest value of the x axis in the mixed distribution plot (default: 5)
+
+bin_width_paralogs = 0.1
+# bin width in paralog ks histograms (default: 0.1, ten bins per unit)
+
+y_axis_max_limit_paralogs_plot = None
+# highest value of the y axis in the mixed distribution plot  (default: none)
+
+num_bootstrap_iterations = 200
+# number of bootstrap iterations for ortholog peak estimate
+
+divergence_colors =  Red, MediumBlue, Goldenrod, Crimson, ForestGreen, Gray, SaddleBrown, Black
+# color of the divergence lines drawn in correspondence of the ortholog peaks
+# use color names/codes separated by comma and use at least as many colors as the number of divergence nodes
+
+x_axis_max_limit_orthologs_plots = 2
+# highest value of the x axis in the ortholog distribution plots (default: 5)
+
+bin_width_orthologs = 0.1
+# bin width in ortholog ks histograms (default: 0.1, ten bins per unit)
+
+max_ks_paralogs = 2
+# maximum paralog ks value accepted from ks data table (default: 5)
+
+max_ks_orthologs = 5
+# maximum ortholog ks value accepted from ks data table (default: 10)

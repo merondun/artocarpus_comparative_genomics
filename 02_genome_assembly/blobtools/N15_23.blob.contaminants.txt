@@ -1,0 +1,98 @@
+## 1.1.1
+## assembly	: /project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/primary_asm/N15_23.fa
+## coverage	 bam0 - /project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/N15_23/06_realign_hic_hifi/asm.hifi.bam
+## taxonomy	 tax0 - /project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/N15_23/07_busco_yak_blob/blast.out
+## nodesDB	: /90daydata/coffea_pangenome/puzzler_trials/blob_downloads/data/nodesDB.txt
+## taxrule	: bestsum
+## min_score	: 0.0
+## min_diff	: 0.0
+## tax_collision_random	: False
+##
+# name	length	GC	N	bam0	phylum.t.6	phylum.s.7	phylum.c.8
+Chr01	27561415	0.3326	23	53.8742	Streptophyta	75426.0	0
+Chr04	35151552	0.3352	123	53.3564	Streptophyta	73294.0	0
+Chr06	46156436	0.3385	100	52.5888	Streptophyta	78189.0	0
+Chr08	45862250	0.3369	0	53.7156	Streptophyta	77396.0	0
+Chr10	39835508	0.3358	23	54.1788	Streptophyta	73449.0	0
+Chr11	42462539	0.3382	0	53.9406	Streptophyta	75057.0	0
+Chr13	34602785	0.3357	0	54.0544	Streptophyta	73512.0	0
+Chr15	30130757	0.3352	0	54.0482	Streptophyta	73646.0	0
+Chr18	34268602	0.3348	169	53.8639	Streptophyta	73512.0	0
+Chr19	35425690	0.3345	69	53.218	Streptophyta	73194.0	0
+Chr22	39699314	0.3412	0	53.5508	Streptophyta	75065.0	0
+Chr24	43546087	0.3347	123	54.0245	Streptophyta	74531.0	0
+Chr26	38750095	0.3333	0	53.9501	Streptophyta	73393.0	0
+Chr28	34951508	0.337	146	54.0044	Streptophyta	73179.0	0
+scaffold_15	167543	0.5628	0	63.9028	Streptophyta	86539.0	0
+scaffold_16	154019	0.3822	0	30.723	no-hit	0.0	0
+scaffold_17	145712	0.3582	0	269.358	Streptophyta	449244.0	0
+scaffold_18	116250	0.5641	0	109.05	Streptophyta	86539.0	0
+scaffold_19	113747	0.3543	0	2755.6751	Streptophyta	368954.0	0
+scaffold_20	104348	0.3723	0	1679.9067	Streptophyta	641977.0	0
+scaffold_21	94708	0.3618	0	1368.3609	Streptophyta	450520.0	0
+scaffold_22	90546	0.3798	0	33.5462	Streptophyta	623148.0	0
+scaffold_23	89622	0.5626	0	109.0988	Streptophyta	86539.0	0
+scaffold_24	87776	0.5617	0	56.7691	Streptophyta	86539.0	0
+scaffold_25	80771	0.4531	0	1439.2842	Streptophyta	137079.0	0
+scaffold_26	79404	0.3562	0	101.7984	Streptophyta	640257.0	0
+scaffold_27	78232	0.378	0	581.4348	Streptophyta	447360.0	0
+scaffold_28	77360	0.4594	0	1459.9123	Streptophyta	178076.0	0
+scaffold_29	61813	0.6873	0	2.4367	Pseudomonadota	29797.0	0
+scaffold_30	61249	0.3662	0	57.9942	Streptophyta	638993.0	0
+scaffold_31	60993	0.4461	0	1055.2741	Streptophyta	95945.0	0
+scaffold_32	58323	0.4503	0	860.1844	Streptophyta	123378.0	0
+scaffold_33	57867	0.4487	0	1001.6597	Streptophyta	108676.0	0
+scaffold_34	57612	0.4524	0	569.9307	Streptophyta	108979.0	0
+scaffold_35	57023	0.3291	0	72.6375	no-hit	0.0	0
+scaffold_36	56467	0.4487	0	999.8204	Streptophyta	123782.0	0
+scaffold_37	55763	0.3719	0	2283.5113	Streptophyta	641957.0	0
+scaffold_38	55476	0.562	0	186.884	Streptophyta	86539.0	0
+scaffold_39	55277	0.3627	0	41.5531	no-hit	0.0	0
+scaffold_40	55009	0.5635	0	51.7952	Streptophyta	86539.0	0
+scaffold_41	54634	0.3763	0	206.0757	Streptophyta	642033.0	0
+scaffold_42	54489	0.4515	0	761.0767	Streptophyta	116052.0	0
+scaffold_43	53776	0.6585	0	1.8672	Pseudomonadota	23383.0	0
+scaffold_44	53252	0.5622	0	98.9944	Streptophyta	86539.0	0
+scaffold_45	51966	0.5616	0	107.4826	Streptophyta	86539.0	0
+scaffold_46	48573	0.5629	0	70.8032	Streptophyta	86539.0	0
+scaffold_47	45705	0.4575	0	370.4636	Streptophyta	134777.0	0
+scaffold_48	45498	0.563	0	50.4843	Streptophyta	86539.0	0
+scaffold_49	44266	0.4576	0	658.399	Streptophyta	141837.0	0
+scaffold_50	44164	0.5626	0	43.1989	Streptophyta	86539.0	0
+scaffold_51	44110	0.4553	0	1122.2693	Streptophyta	146009.0	0
+scaffold_52	43529	0.5643	0	36.9087	Streptophyta	86539.0	0
+scaffold_53	43368	0.5619	0	14.1816	Streptophyta	86539.0	0
+scaffold_54	42433	0.5613	0	18.0436	Streptophyta	86539.0	0
+scaffold_55	41710	0.5623	0	227.4987	Streptophyta	86539.0	0
+scaffold_56	40919	0.461	0	555.8152	Streptophyta	129116.0	0
+scaffold_57	40756	0.447	0	34.4924	Streptophyta	70698.0	0
+scaffold_58	40672	0.5617	0	115.1093	Streptophyta	86539.0	0
+scaffold_59	40473	0.5612	0	1.8607	Streptophyta	86493.0	0
+scaffold_60	40248	0.4499	0	551.3599	Streptophyta	111438.0	0
+scaffold_61	40080	0.6774	0	2.8185	Pseudomonadota	38490.0	0
+scaffold_62	39759	0.5621	0	17.9944	Streptophyta	86539.0	0
+scaffold_63	39455	0.5602	0	34.9935	Streptophyta	92973.0	0
+scaffold_64	37992	0.6551	0	10.2416	Pseudomonadota	50970.0	0
+scaffold_65	35894	0.561	0	41.6124	Streptophyta	86539.0	0
+scaffold_66	35473	0.6654	0	3.5383	Pseudomonadota	34863.0	0
+scaffold_67	35183	0.5644	0	2.1405	Streptophyta	86539.0	0
+scaffold_68	34346	0.5612	0	31.0628	Streptophyta	86539.0	0
+scaffold_69	33322	0.4024	0	13.5603	Streptophyta	297100.0	0
+scaffold_70	31710	0.273	0	3.1666	Ascomycota	18633.0	0
+scaffold_71	31369	0.4335	0	438.1378	Streptophyta	56225.0	0
+scaffold_72	31346	0.4466	0	11.2117	Streptophyta	55356.0	0
+scaffold_73	30112	0.684	0	3.7515	Pseudomonadota	33912.0	0
+scaffold_74	26625	0.5619	0	4.2428	Streptophyta	86436.0	0
+scaffold_75	22451	0.5508	0	15.6538	Streptophyta	96435.0	0
+scaffold_76	22449	0.5607	0	30.7513	Streptophyta	86539.0	0
+scaffold_77	22134	0.3957	0	771.2164	Streptophyta	208239.0	0
+scaffold_78	20251	0.6644	0	2.4792	Pseudomonadota	21298.0	0
+scaffold_79	18736	0.4631	0	4.6894	Streptophyta	88524.0	0
+scaffold_80	18000	0.6892	0	2.0919	Pseudomonadota	16804.0	0
+scaffold_81	15816	0.4585	0	226.1754	Streptophyta	82383.0	0
+scaffold_82	13453	0.4576	0	0.0	Streptophyta	81248.0	0
+scaffold_83	13113	0.455	0	69.8744	Streptophyta	82320.0	0
+scaffold_84	11715	0.7003	0	1.0714	Pseudomonadota	35987.0	0
+scaffold_85	10082	0.3801	0	7.4697	Streptophyta	179867.0	0
+scaffold_86	9000	0.6892	0	0.0	Pseudomonadota	45031.0	0
+scaffold_87	5500	0.6465	0	0.0	no-hit	0.0	0

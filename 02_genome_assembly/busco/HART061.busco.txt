@@ -1,0 +1,26 @@
+# BUSCO version is: 5.8.3 
+# The lineage dataset is: embryophyta_odb10 (Creation date: 2024-01-08, number of genomes: 50, number of BUSCOs: 1614)
+# Summarized benchmarking in BUSCO notation for file /project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/primary_asm/HART061.fa
+# BUSCO was run in mode: euk_genome_min
+# Gene predictor used: miniprot
+
+	***** Results: *****
+
+	C:98.9%[S:65.9%,D:33.1%],F:0.7%,M:0.3%,n:1614,E:5.1%	   
+	1597	Complete BUSCOs (C)	(of which 81 contain internal stop codons)		   
+	1063	Complete and single-copy BUSCOs (S)	   
+	534	Complete and duplicated BUSCOs (D)	   
+	12	Fragmented BUSCOs (F)			   
+	5	Missing BUSCOs (M)			   
+	1614	Total BUSCO groups searched		   
+
+Assembly Statistics:
+
+
+Dependencies and versions:
+	hmmsearch: 3.4
+	bbtools: None
+	miniprot_index: 0.16-r273
+	miniprot_align: 0.16-r273
+	python: sys.version_info(major=3, minor=12, micro=10, releaselevel='final', serial=0)
+	busco: 5.8.3

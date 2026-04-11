@@ -1,0 +1,2 @@
+Sample	SizeBP	Sequences	Contigs	Gaps	ContigN50	ScafN50	YAK_CV	YAK_QV	WithinChrsBP	PropWithinChrs	GapsInChrs	BUSCO_Complete	BUSCO_singlecopy
+HART058	 868251531	 166	 290	124	 15260406	 30656079	0.978	51.666	 858237461	0.9885	123	98.8	66.0

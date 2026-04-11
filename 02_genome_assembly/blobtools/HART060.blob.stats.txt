@@ -1,0 +1,5 @@
+## 1.1.1
+## bam0=/project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/HART060/06_realign_hic_hifi/asm.hifi.bam
+# name	colour	count_visible	count_visible_perc	span_visible	span_visible_perc	n50	gc_mean	gc_std	bam0_mean	bam0_std	bam0_read_map	bam0_read_map_p
+all	None	85	100.0%	804,697,138	100.0%	28,107,947	0.44	0.11	130.0	365.6	1,113,220	72.7%
+Streptophyta	#1f77b4	85	100.0%	804,697,138	100.0%	28,107,947	0.44	0.11	130.0	365.6	1,113,220	72.7%
