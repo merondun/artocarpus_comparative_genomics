@@ -2259,6 +2259,7 @@ sort(table(biotype), decreasing=TRUE)[1:10]
 #   27475                   5956                    703                      5                                                                      
 # <NA>                   <NA>                   <NA> 
 
+mets <- read_tsv("~/artocarpus_comparative_genomics/03_annotation/gene_annotation/AnnotationQC_fromGTF.tsv")
 md <- read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% mutate(Accession = gsub('_','',Accession))
 df <- md %>%
   left_join(mets, by = "Accession") %>%
@@ -2312,7 +2313,28 @@ p <- ggplot(plot_df, aes(x = ylab, y = n, fill = biotype)) +
   labs(fill = NULL, y = "Genes")
 
 p
-ggsave('~/symlinks/comp/figures/20260413_Annotation_Counts.pdf',p,height=5,width=4.5)
+ggsave('~/artocarpus_comparative_genomics/figures/20260413_Annotation_Counts.pdf',p,height=5,width=4.5)
+
+mets %>% select(matches('Acc|^n_ge|n_transcripts|protein'))
+# # A tibble: 16 × 4
+# Accession  n_genes n_transcripts n_protein_coding_genes
+# <chr>        <dbl>         <dbl>                  <dbl>
+#   1 Antiaris     12693         12736                  11337
+# 2 Artocarpus   34139         35714                  27475
+# 3 Batocarpus   21491         22508                  18374
+# 4 Ficus        13259         13303                  11886
+# 5 HART001      33194         33590                  26816
+# 6 HART027      31338         31679                  25707
+# 7 HART058      31600         31955                  25898
+# 8 HART060      29803         30109                  24609
+# 9 HART061      31240         31600                  25590
+# 10 HART062      31398         31760                  25705
+# 11 HART063      34139         35714                  27475
+# 12 HART067      32903         33300                  26610
+# 13 HART068      29716         30031                  24543
+# 14 Morus        15116         15175                  13625
+# 15 N1523        21491         22508                  18374
+# 16 N9750        29577         29890                  24477
 
 ```
 
