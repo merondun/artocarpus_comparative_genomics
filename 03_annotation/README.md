@@ -4,6 +4,12 @@ We have Isoseq data for 2 samples (Artocarpus camansi (6 tissues) and Batocarpus
 
 These stpes will demultiplex Iso‑Seq reads, convert selected partitions to FASTA, and run eGAPx (with optional short reads just for sensitivity, it was found that Isoseq is sufficient) to generate gene/transcript models. Extract the longest isoform per gene and predict CDS/proteins with TransDecoder, then liftover reference annotations to other assemblies. Finally clean/standardize headers, produce mapping tables, and split CDS/proteomes by chromosome for downstream comparative analyses. 
 
+In the end, can produce these summary figures:
+
+![annotation_counts](/figures/20260413_Annotation_Counts_Orthogroups.png)
+
+
+
 Primary outputs after this massive codeblock: 
 
 - eGAPx annotations: complete.genomic.gtf and run out/work directories.
@@ -11,6 +17,8 @@ Primary outputs after this massive codeblock:
 - Longest‑isoform exports: *.longest_transcript_per_gene.gtf and .fa.
 - Liftoff transfers: per‑sample GFF3 liftover files.
 - Cleaned inputs for downstream: proteomes/, cds/, gtf/ (clean headers) + genes.tsv mappings and chromosome‑split FASTA files.
+
+___
 
 ## Demultiplexing & Input Prep
 
@@ -750,5 +758,291 @@ for fa in *.fa; do
     { if (chr != "") print > file }
     ' "${sample}.genes.tsv" "$fa"
 done
+```
+
+## Final Counts
+
+Take the `.gtf` for each species and extract counts:
+
+```R
+setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/gtf')
+library(tidyverse)
+library(data.table)
+library(stringr)
+
+read_gtf_like <- function(path) {
+  dt <- data.table::fread(
+    path, sep = "\t", skip = 3, header = FALSE, quote = "", fill = TRUE,
+    data.table = TRUE, showProgress = FALSE
+  )
+  dt <- dt[!grepl("^#", V1)]
+  if (ncol(dt) < 9) stop("File seems malformed (<9 columns): ", path)
+  
+  setnames(dt, c("seqid","source","type","start","end","score","strand","phase","attributes"))
+  dt[, start := as.integer(start)]
+  dt[, end   := as.integer(end)]
+  dt
+}
+
+get_attr <- function(x, key) {
+  str_match(x, paste0("(^|;)", key, "=([^;]+)"))[,3]
+}
+
+split_on_comma <- function(df, col) {
+  df %>%
+    mutate("{col}" := str_split(.data[[col]], ",")) %>%
+    unnest(.data[[col]])
+}
+
+summarize_one_file <- function(path) {
+  g <- read_gtf_like(path) %>%
+    as_tibble() %>%
+    mutate(
+      ID     = get_attr(attributes, "ID"),
+      Parent = get_attr(attributes, "Parent"),
+      gene_biotype = get_attr(attributes, "gene_biotype"),
+      transcript_biotype = get_attr(attributes, "transcript_biotype"),
+      pseudo = get_attr(attributes, "pseudo")
+    )
+  
+  genes <- g %>%
+    filter(type == "gene", !is.na(ID)) %>%
+    transmute(
+      gene_id = ID,
+      gene_biotype = gene_biotype,
+      pseudo = pseudo,
+      # normalize / coarsen biotypes for reporting
+      gene_biotype2 = case_when(
+        is.na(gene_biotype) | gene_biotype == "" ~ "unknown",
+        gene_biotype %in% c("pseudogene", "transcribed_pseudogene") ~ "pseudogene",
+        gene_biotype == "protein_coding" ~ "protein_coding",
+        gene_biotype == "lncRNA" ~ "lncRNA",
+        TRUE ~ gene_biotype
+      )
+    )
+  
+  tx <- g %>%
+    filter(type %in% c("transcript","mRNA"), !is.na(ID)) %>%
+    transmute(
+      tx_id = ID,
+      gene_id = Parent,
+      tx_start = start,
+      tx_end = end
+    ) %>%
+    split_on_comma("gene_id")
+  
+  exons <- g %>%
+    filter(type == "exon", !is.na(Parent)) %>%
+    transmute(
+      tx_id = Parent,
+      exon_len = (end - start + 1L)
+    ) %>%
+    split_on_comma("tx_id")
+  
+  cds <- g %>%
+    filter(type == "CDS", !is.na(Parent)) %>%
+    transmute(
+      tx_id = Parent,
+      cds_len = (end - start + 1L)
+    ) %>%
+    split_on_comma("tx_id")
+  
+  ex_by_tx <- exons %>%
+    group_by(tx_id) %>%
+    summarise(
+      exon_count = n(),
+      exon_bp = sum(exon_len),
+      .groups = "drop"
+    )
+  
+  cds_by_tx <- cds %>%
+    group_by(tx_id) %>%
+    summarise(
+      cds_bp = sum(cds_len),
+      .groups = "drop"
+    )
+  
+  tx2 <- tx %>%
+    left_join(ex_by_tx, by = "tx_id") %>%
+    left_join(cds_by_tx, by = "tx_id") %>%
+    mutate(
+      exon_count = replace_na(exon_count, 0L),
+      exon_bp    = replace_na(exon_bp, 0L),
+      cds_bp     = replace_na(cds_bp, 0L),
+      tx_len_bp = if_else(exon_bp > 0L, exon_bp, (tx_end - tx_start + 1L)),
+      is_multiexon = exon_count >= 2L
+    )
+  
+  # representative transcript per gene (longest)
+  gene_rep <- tx2 %>%
+    filter(!is.na(gene_id)) %>%
+    group_by(gene_id) %>%
+    slice_max(order_by = tx_len_bp, n = 1, with_ties = FALSE) %>%
+    ungroup()
+  
+  gene_rep2 <- gene_rep %>%
+    left_join(genes, by = "gene_id") %>%
+    mutate(
+      is_protein_coding = gene_biotype2 == "protein_coding",
+      is_lncRNA         = gene_biotype2 == "lncRNA",
+      is_pseudogene     = gene_biotype2 == "pseudogene"
+    )
+  
+  tibble(
+    Accession = str_replace(basename(path), "\\.gtf$", ""),
+    file = basename(path),
+    n_genes = n_distinct(genes$gene_id),
+    n_transcripts = n_distinct(tx2$tx_id),
+    
+    # gene biotype counts (using the normalized gene_biotype2)
+    n_protein_coding_genes = sum(genes$gene_biotype2 == "protein_coding", na.rm = TRUE),
+    n_pseudogenes          = sum(genes$gene_biotype2 == "pseudogene", na.rm = TRUE),  # includes transcribed_pseudogene
+    n_lncRNA_genes         = sum(genes$gene_biotype2 == "lncRNA", na.rm = TRUE),
+    n_other_or_unknown_genes = sum(!genes$gene_biotype2 %in% c("protein_coding","pseudogene","lncRNA"), na.rm = TRUE),
+    
+    # structural stats (using representative transcript per gene)
+    mean_tx_len_bp = mean(gene_rep2$tx_len_bp, na.rm = TRUE),
+    mean_cds_len_bp = mean(gene_rep2$cds_bp[gene_rep2$is_protein_coding], na.rm = TRUE),
+    mean_exons_per_gene = mean(gene_rep2$exon_count, na.rm = TRUE),
+    pct_multiexon_genes = 100 * mean(gene_rep2$is_multiexon, na.rm = TRUE)
+  )
+}
+
+gtfs <- list.files(pattern = "\\.gtf$", full.names = TRUE)
+
+metrics <- purrr::map_dfr(gtfs, summarize_one_file) %>%
+  mutate(
+    Method = case_when(
+      Accession %in% c("N1523","HART063") ~ "Iso-Seq annotation",
+      TRUE ~ "Liftover"
+    )
+  )
+
+metrics
+
+#removes dups
+mets <- metrics %>% filter(!grepl('Arto|Bato',Accession))
+readr::write_tsv(metrics, "AnnotationQC_fromGTF.tsv")
+
+# What leads to the discrepancy between n_genes != pcgs + psuedo?
+g <- data.table::fread("HART063.gtf", sep="\t", skip=3, header=FALSE, fill=TRUE, data.table=FALSE)
+colnames(g)[1:9] <- c("seqid","source","type","start","end","score","strand","phase","attr")
+genes <- g[g$type=="gene", ]
+biotype <- stringr::str_match(genes$attr, "(^|;)gene_biotype=([^;]+)")[,3]
+sort(table(biotype), decreasing=TRUE)[1:10]
+# biotype
+# protein_coding             pseudogene                 lncRNA transcribed_pseudogene                   <NA>                   <NA>                   <NA> 
+#   27475                   5956                    703                      5                                                                      
+# <NA>                   <NA>                   <NA> 
+
+md <- read_tsv('~/symlinks/comp/samples.txt') %>% mutate(Accession = gsub('_','',Accession))
+df <- md %>%
+  left_join(mets, by = "Accession") %>%
+  mutate(
+    Species_short = gsub('Artocarpus','A.',Group),
+    ylab = paste0(Species_short, " (", Accession, ")"),
+    ylab = fct_reorder(ylab, `Accession Order`,.desc = TRUE)
+  )
+
+plot_df <- df %>%
+  transmute(
+    ylab, Method,
+    protein_coding = n_protein_coding_genes,
+    pseudogene = n_pseudogenes,
+    lncRNA = n_lncRNA_genes,
+    other = n_other_or_unknown_genes
+  ) %>%
+  pivot_longer(cols = c(protein_coding, pseudogene, lncRNA, other),
+               names_to = "biotype", values_to = "n") %>%
+  mutate(
+    biotype = factor(biotype, levels = c("protein_coding", "pseudogene", "lncRNA", "other"))
+  )
+lab_df <- plot_df %>%
+  filter(biotype == "protein_coding") %>%
+  group_by(ylab,Method) %>%
+  summarise(n = sum(n), .groups = "drop") %>%
+  mutate(ypos = n / 2)
+
+p <- ggplot(plot_df, aes(x = ylab, y = n, fill = biotype)) +
+  geom_col(width = 0.8) +
+  geom_text(
+    data = lab_df,
+    aes(x = ylab, y = ypos, label = scales::comma(n)),
+    inherit.aes = FALSE,
+    color = "white",
+    size = 2.8
+  ) +
+  coord_flip() +
+  scale_fill_manual(values = c(
+    protein_coding = "#377eb8",
+    pseudogene = "#e41a1c",
+    lncRNA = "#4daf4a",
+    other = "grey70"
+  )) +
+  facet_grid(Method ~ ., scales = "free_y", space = "free_y") +
+  theme_bw(base_size = 9) +
+  theme(
+    legend.position = "right",
+    axis.title = element_blank()
+  ) +
+  labs(fill = NULL, y = "Genes")
+
+p
+ggsave('~/symlinks/comp/figures/20260413_Annotation_Counts.pdf',p,height=5,width=4.5)
+
+```
+
+And after running orthofinder later... return here to show orthogroup overlap by sample: 
+
+```R
+setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/orthofinder/Subgenome_Divided/OrthoFinder/Results_Feb24/Orthogroups')
+library(tidyverse)
+library(stringr)
+library(readr)
+
+gc <- read_tsv("Orthogroups.GeneCount.tsv", show_col_types = FALSE)
+md <- read_tsv('~/symlinks/comp/samples.txt') %>% mutate(Accession = gsub('_','',Accession)) %>% dplyr::select(Accession,Group,ord = `Accession Order`)
+md <- rbind(md, data.frame(Accession = c('Batocarpus','Morus'),Group = c('Batocarpus sp.','Morus mongolica'),ord = c(98,99)))
+
+# First column is usually Orthogroup
+og_col <- names(gc)[1]
+
+long <- gc %>%
+  pivot_longer(cols = -all_of(og_col), names_to = "Genome", values_to = "n_genes") %>%
+  mutate(
+    present = n_genes > 0,
+    Accession = str_replace(Genome, "_[AB]$", ""),
+    Subgenome = str_extract(Genome, "[AB]$") %>% replace_na("NA")
+  )
+
+missing_summary <- long %>%
+  group_by(Genome, Accession, Subgenome) %>%
+  summarise(
+    n_orthogroups = n(),
+    n_missing = sum(!present),
+    pct_missing = 100 * mean(!present),
+    .groups = "drop"
+  )
+
+# join to your metadata to color by Method / order nicely
+missing_summary2 <- missing_summary %>%
+  left_join(md %>% select(Accession, ord, Group), by = "Accession") %>% drop_na(Group) %>% 
+  mutate(
+    # make a nice label: Group (Accession_subgenome)
+    ylab = if_else(Subgenome %in% c("A","B"),
+                   paste0(Group, " (", Accession, "_", Subgenome, ")"),
+                   paste0(Group, " (", Accession, ")")),
+    ylab = fct_reorder(ylab, ord, .desc = TRUE)
+  )
+
+op <- ggplot(missing_summary2, aes(x = ylab, y = pct_missing, fill = Subgenome)) +
+  geom_col(width = 0.8) +
+  coord_flip() +
+  theme_bw(base_size = 9) +
+  scale_fill_manual(values=c('#f8766d','#00bf7d','black'))+
+  labs(x = NULL, y = "% orthogroups missing", fill = "Subgenome")
+
+ggsave('~/symlinks/comp/figures/20260413_Orthogroup_Missingness.pdf',op,height=5,width=4.5)
+
 ```
 
