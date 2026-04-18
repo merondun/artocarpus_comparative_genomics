@@ -1682,22 +1682,7 @@ for SAMPLE in HART063 N15_23; do
 done 
 ```
 
-Sanity checks: count genes/transcripts/cds/proteins from the files:
 
-```bash
-awk 'BEGIN{genes=0; transcripts=0; cds=0} !/^#/{
-  if($3=="gene") genes++;
-  if($3=="transcript" || $3=="mRNA") transcripts++;
-  if($3=="CDS") cds++;
-  if(match($0,/protein_id "[^"]+"/)){
-    pid[substr($0,RSTART+12,RLENGTH-13)]=1;
-  }
-} END{
-  print "Genes:",genes,"Transcripts:",transcripts,"CDS:",cds,"Unique_Proteins:",length(pid)
-}' complete.genomic.gtf
-Genes: 34139 Transcripts: 55865 CDS: 304032 Unique_Proteins: 45455
-
-```
 
 ## Liftover
 
@@ -2335,60 +2320,6 @@ mets %>% select(matches('Acc|^n_ge|n_transcripts|protein'))
 # 14 Morus        15116         15175                  13625
 # 15 N1523        21491         22508                  18374
 # 16 N9750        29577         29890                  24477
-
-```
-
-And after running orthofinder later... return here to show orthogroup overlap by sample: 
-
-```R
-setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/orthofinder/Subgenome_Divided/OrthoFinder/Results_Feb24/Orthogroups')
-library(tidyverse)
-library(stringr)
-library(readr)
-
-gc <- read_tsv("Orthogroups.GeneCount.tsv", show_col_types = FALSE)
-md <- read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% mutate(Accession = gsub('_','',Accession)) %>% dplyr::select(Accession,Group,ord = Accession_Order)
-md <- rbind(md, data.frame(Accession = c('Batocarpus','Morus'),Group = c('Batocarpus sp.','Morus mongolica'),ord = c(98,99)))
-
-# First column is usually Orthogroup
-og_col <- names(gc)[1]
-
-long <- gc %>%
-  pivot_longer(cols = -all_of(og_col), names_to = "Genome", values_to = "n_genes") %>%
-  mutate(
-    present = n_genes > 0,
-    Accession = str_replace(Genome, "_[AB]$", ""),
-    Subgenome = str_extract(Genome, "[AB]$") %>% replace_na("NA")
-  )
-
-missing_summary <- long %>%
-  group_by(Genome, Accession, Subgenome) %>%
-  summarise(
-    n_orthogroups = n(),
-    n_missing = sum(!present),
-    pct_missing = 100 * mean(!present),
-    .groups = "drop"
-  )
-
-# join to your metadata to color by Method / order nicely
-missing_summary2 <- missing_summary %>%
-  left_join(md %>% select(Accession, ord, Group), by = "Accession") %>% drop_na(Group) %>% 
-  mutate(
-    # make a nice label: Group (Accession_subgenome)
-    ylab = if_else(Subgenome %in% c("A","B"),
-                   paste0(Group, " (", Accession, "_", Subgenome, ")"),
-                   paste0(Group, " (", Accession, ")")),
-    ylab = fct_reorder(ylab, ord, .desc = TRUE)
-  )
-
-op <- ggplot(missing_summary2, aes(x = ylab, y = pct_missing, fill = Subgenome)) +
-  geom_col(width = 0.8) +
-  coord_flip() +
-  theme_bw(base_size = 9) +
-  scale_fill_manual(values=c('#f8766d','#00bf7d','black'))+
-  labs(x = NULL, y = "% orthogroups missing", fill = "Subgenome")
-
-ggsave('~/symlinks/comp/figures/20260413_Orthogroup_Missingness.pdf',op,height=5,width=4.5)
 
 ```
 
@@ -3190,6 +3121,167 @@ Chr27   Chr28   43.41%  27806804        +       B
 Chr28   Chr28   57.10%  32679041        +       A
 ```
 
+Apply proper stats excluding overlap from the PAF in R:
+
+```R
+library(data.table)
+library(dplyr)
+library(stringr)
+library(meRo) #devtools::install_github('merondun/meRo')
+
+paf <- fread('~/artocarpus_comparative_genomics/07_subgenome_alignments/subgenome_delineation/Arto_Bato.paf.gz', sep = "\t", header = FALSE, quote = "", fill = TRUE, data.table = FALSE)
+min_block_bp <- 2500
+
+colnames(paf)[1:12] <- c(
+  "qname","qlen","qstart","qend","strand",
+  "tname","tlen","tstart","tend",
+  "nmatch","alen","mapq"
+)
+
+paf <- paf %>%
+  mutate(
+    qlen   = as.numeric(qlen),
+    qstart = as.numeric(qstart),
+    qend   = as.numeric(qend),
+    tlen   = as.numeric(tlen),
+    tstart = as.numeric(tstart),
+    tend   = as.numeric(tend),
+    alen   = as.numeric(alen)
+  ) %>%
+  filter(alen >= min_block_bp)
+
+merge_intervals_len <- function(start, end) {
+  if (length(start) == 0) return(0)
+  o <- order(start, end)
+  start <- start[o]
+  end <- end[o]
+  cs <- start[1]
+  ce <- end[1]
+  total <- 0
+  if (length(start) > 1) {
+    for (i in 2:length(start)) {
+      if (start[i] <= ce) {
+        ce <- max(ce, end[i])
+      } else {
+        total <- total + (ce - cs)
+        cs <- start[i]
+        ce <- end[i]
+      }
+    }
+  }
+  total + (ce - cs)
+}
+
+pair_stats <- paf %>%
+  group_by(qname, tname) %>%
+  summarise(
+    qlen = first(qlen),
+    tlen = first(tlen),
+    q_cov_bp = merge_intervals_len(qstart, qend),
+    t_cov_bp = merge_intervals_len(tstart, tend),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    mean_len_bp = (qlen + tlen) / 2,
+    q_cov_pct = 100 * q_cov_bp / qlen,
+    t_cov_pct = 100 * t_cov_bp / tlen,
+    reciprocal_synteny_pct = 100 * ((q_cov_bp + t_cov_bp) / 2) / mean_len_bp
+  )
+
+best_pairs <- bind_rows(
+  pair_stats %>%
+    group_by(qname) %>%
+    slice_max(order_by = reciprocal_synteny_pct, n = 1, with_ties = FALSE) %>%
+    ungroup(),
+  pair_stats %>%
+    group_by(tname) %>%
+    slice_max(order_by = reciprocal_synteny_pct, n = 1, with_ties = FALSE) %>%
+    ungroup()
+) %>%
+  distinct(qname, tname, .keep_all = TRUE) %>%
+  arrange(qname, tname)
+
+bp <- best_pairs %>%
+         select(
+           artocarpus_chr = qname,
+           batocarpus_chr = tname,
+           artocarpus_len_bp = qlen,
+           batocarpus_len_bp = tlen,
+           artocarpus_covered_bp = q_cov_bp,
+           batocarpus_covered_bp = t_cov_bp,
+           artocarpus_cov_pct = q_cov_pct,
+           batocarpus_cov_pct = t_cov_pct,
+           reciprocal_synteny_pct
+         )
+
+summary_tbl <- best_pairs %>%
+  summarise(
+    n_pairs = n(),
+    mean_reciprocal_synteny_pct = mean(reciprocal_synteny_pct),
+    median_reciprocal_synteny_pct = median(reciprocal_synteny_pct),
+    min_reciprocal_synteny_pct = min(reciprocal_synteny_pct),
+    max_reciprocal_synteny_pct = max(reciprocal_synteny_pct),
+    mean_artocarpus_cov_pct = mean(q_cov_pct),
+    mean_batocarpus_cov_pct = mean(t_cov_pct)
+  )
+summary_tbl
+# # A tibble: 1 × 7
+# n_pairs mean_reciprocal_synteny_pct median_reciprocal_synteny_pct min_reciprocal_synteny_pct max_reciprocal_synteny_pct mean_artocarpus_cov_pct mean_batocarpus_cov_pct
+# <int>                       <dbl>                         <dbl>                      <dbl>                      <dbl>                   <dbl>                   <dbl>
+#   1      28                        40.8                          37.4                       24.1                       55.4                    51.4                    33.3
+
+# Plot 
+best_pairs <- best_pairs %>%
+  mutate(
+    qname_num = as.integer(gsub("^Chr", "", qname)),
+    tname_num = as.integer(gsub("^Chr", "", tname))
+  ) %>%
+  group_by(tname) %>%
+  arrange(desc(reciprocal_synteny_pct), .by_group = TRUE) %>%
+  mutate(
+    subgenome = c("A", "B")[row_number()],
+    subgenome = factor(subgenome, levels = c("A", "B"))
+  ) %>%
+  ungroup() %>%
+  mutate(
+    pair_label = paste0(qname, " \u2194 ", tname),
+    pair_label = forcats::fct_reorder(pair_label, qname_num),
+    recip_lab = sprintf("%.1f", reciprocal_synteny_pct)
+  )
+p <- ggplot(best_pairs, aes(x = pair_label, y = reciprocal_synteny_pct, fill = subgenome)) +
+  geom_col(width = 0.8) +
+  geom_text(aes(label = recip_lab), hjust = -0.1, size = 2.8) +
+  coord_flip() +
+  scale_fill_manual(values = c("A" = "#0072B2", "B" = "#E69F00")) +
+  labs(
+    x = NULL,
+    y = "Reciprocal syntenic coverage (%)",
+    fill = "Subgenome"
+  ) +
+  theme_bw(base_size = 10) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "top"
+  ) +
+  expand_limits(y = max(best_pairs$reciprocal_synteny_pct) + 5)
+p
+
+ggsave("~/artocarpus_comparative_genomics/figures/20260417_Arto_Bato_reciprocal_synteny_pairs.pdf", p, width = 5.5, height = 6.5)
+
+best_pairs %>% sum_stats(reciprocal_synteny_pct)
+# mean   min   max    sd    se median   iqr conf_low conf_high
+# <dbl> <dbl> <dbl> <dbl> <dbl>  <dbl> <dbl>    <dbl>     <dbl>
+#   1  40.8  24.1  55.4  9.32  1.76   37.4  15.8     37.2      44.5
+best_pairs %>% group_by(subgenome) %>% sum_stats(reciprocal_synteny_pct)
+# subgenome  mean   min   max    sd    se median   iqr conf_low conf_high
+# <fct>     <dbl> <dbl> <dbl> <dbl> <dbl>  <dbl> <dbl>    <dbl>     <dbl>
+#   1 A          49.1  38.6  55.4  4.37 1.17    50.0  2.32     46.6      51.6
+# 2 B          32.6  24.1  36.2  3.72 0.993   34.0  3.98     30.4      34.7
+```
+
+
+
 
 
 ## BUSCO-level Subgenome Synteny
@@ -3809,15 +3901,61 @@ write.tree(dated,'/project/coffea_pangenome/Artocarpus/Comparative_Paper/cafe5/S
 
 ```
 
-![image-20260318133526578](C:\Users\justin.merondun\AppData\Roaming\Typora\typora-user-images\image-20260318133526578.png)
+### Orthogroup missingness
 
-Dividing into A and B trees, and aligning labels with node rotation:
+Show orthogroup overlap by sample: 
 
-![image-20260318134009062](C:\Users\justin.merondun\AppData\Roaming\Typora\typora-user-images\image-20260318134009062.png)
+```R
+setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/orthofinder/Subgenome_Divided/OrthoFinder/Results_Feb24/Orthogroups')
+library(tidyverse)
+library(stringr)
+library(readr)
 
-After node alignment:
+gc <- read_tsv("Orthogroups.GeneCount.tsv", show_col_types = FALSE)
+md <- read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% mutate(Accession = gsub('_','',Accession)) %>% dplyr::select(Accession,Group,ord = Accession_Order)
+md <- rbind(md, data.frame(Accession = c('Batocarpus','Morus'),Group = c('Batocarpus sp.','Morus mongolica'),ord = c(98,99)))
 
-![image-20260318134937047](C:\Users\justin.merondun\AppData\Roaming\Typora\typora-user-images\image-20260318134937047.png)
+# First column is usually Orthogroup
+og_col <- names(gc)[1]
+
+long <- gc %>%
+  pivot_longer(cols = -all_of(og_col), names_to = "Genome", values_to = "n_genes") %>%
+  mutate(
+    present = n_genes > 0,
+    Accession = str_replace(Genome, "_[AB]$", ""),
+    Subgenome = str_extract(Genome, "[AB]$") %>% replace_na("NA")
+  )
+
+missing_summary <- long %>%
+  group_by(Genome, Accession, Subgenome) %>%
+  summarise(
+    n_orthogroups = n(),
+    n_missing = sum(!present),
+    pct_missing = 100 * mean(!present),
+    .groups = "drop"
+  )
+
+# join to your metadata to color by Method / order nicely
+missing_summary2 <- missing_summary %>%
+  left_join(md %>% select(Accession, ord, Group), by = "Accession") %>% drop_na(Group) %>% 
+  mutate(
+    # make a nice label: Group (Accession_subgenome)
+    ylab = if_else(Subgenome %in% c("A","B"),
+                   paste0(Group, " (", Accession, "_", Subgenome, ")"),
+                   paste0(Group, " (", Accession, ")")),
+    ylab = fct_reorder(ylab, ord, .desc = TRUE)
+  )
+
+op <- ggplot(missing_summary2, aes(x = ylab, y = pct_missing, fill = Subgenome)) +
+  geom_col(width = 0.8) +
+  coord_flip() +
+  theme_bw(base_size = 9) +
+  scale_fill_manual(values=c('#f8766d','#00bf7d','black'))+
+  labs(x = NULL, y = "% orthogroups missing", fill = "Subgenome")
+
+ggsave('~/symlinks/comp/figures/20260413_Orthogroup_Missingness.pdf',op,height=5,width=4.5)
+
+```
 
 
 
@@ -4810,6 +4948,8 @@ savedf <- gene_pair %>% dplyr::select(Gene, omega_med.Shared_A, omega_med.Shared
 write.table(savedf,file='AllGenes_Puri_20260406.tsv',quote=F,sep='\t',row.names=F)
 
 ```
+
+
 
 #### Plot Functions
 
