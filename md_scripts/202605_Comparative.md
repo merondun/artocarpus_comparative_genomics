@@ -4484,10 +4484,11 @@ wstats_clean <- wstats %>%
   mutate(omega = pmin(MLE, omega_cap),
          pos = FDR < 0.10 & MLE > 1,
          puri = FDR < 0.10 & MLE < 1) %>% 
-  filter(!grepl('^A$|^B$|Morus|Batocarpus',Branch)) 
+  filter(!grepl('^A$|^B$',Branch)) 
 hist(wstats_clean$omega)
-write_tsv(wstats_clean,'Node_dNdS_20260406-RInput.tsv')
-wstats_clean <- read_tsv('Node_dNdS_20260406-RInput.tsv')
+fwrite(wstats_clean,'~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz')
+wstats_clean <- fread('~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz') %>% as_tibble %>% 
+  filter(!grepl('^A$|^B$|Morus|Batocarpus',Branch)) 
 
 # First, aggregate: compare # purified genes to total for each branch 
 # Build per-ID counts
@@ -4579,62 +4580,7 @@ idord <- c('A. altilis','A. mariannensis','A. camansi','A. rigidus','A. odoratis
 # import md
 md <-  read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% dplyr::select(ID=Accession,Group) %>% mutate(ID = gsub('_','',ID))
 
-# Add Fisher exact 95% CI for purifying rows (no continuity correction)
-res_puri <- res_df %>%
-  filter(outcome == "puri") %>%
-  rowwise() %>%
-  mutate(
-    ft = list(fisher.test(matrix(c(a, b, c, d), nrow = 2, byrow = TRUE))),  # exact
-    ci_lo = ft$conf.int[1],
-    ci_hi = ft$conf.int[2]
-  ) %>%
-  ungroup() %>%
-  dplyr::select(-ft) %>% 
-  left_join(.,md) %>% 
-  mutate(Group = factor(ifelse(is.na(Group),ID,Group),levels=rev((idord))),
-         contrast = paste(L1, "vs", L2))
-
-puri_plot <- res_puri %>% 
-  ggplot(aes(x = odds_ratio, y = Group)) +
-  geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi), height = 0.25, color = "grey55") +
-  geom_point(aes(color = sig), size = 2.4) +
-  geom_text(aes(label = ifelse(sig, "*", "")), nudge_x = 0.05, size = 5) +
-  geom_vline(xintercept = 1, linetype = "dashed") +
-  scale_color_manual(values = c(`TRUE` = "#D95F02", `FALSE` = "#1B9E77"), guide = "none") +
-  #scale_x_log10() +
-  facet_grid(.~ contrast) +
-  labs(x = "Odds ratio",y = NULL) +
-  #coord_cartesian(xlim=c(-1,1))+
-  theme_bw(base_size = 12) +
-  theme(strip.text = element_text(face = "bold"))
-puri_plot
-
-## log2 scale
-plt_df <- res_puri %>%
-  mutate(
-    x     = log2(odds_ratio),
-    xmin  = log2(ci_lo),
-    xmax  = log2(ci_hi)
-  ) 
-
-# Axis breaks and labels: -2,-1,0,1,2 => L2×4, L2×2, equal, L1×2, L1×4
-brks <- c(-2, -1, 0, 1, 2)
-labs <- c("×4","×2","equal","×2","×4")
-
-puri_plot <- ggplot(plt_df, aes(x = x, y = Group)) +
-  geom_errorbarh(aes(xmin = xmin, xmax = xmax), height = 0.25, color = "grey55") +
-  geom_point(aes(color = sig), size = 2.8) +
-  geom_text(aes(label = ifelse(sig, "*", "")), nudge_x = 0.15, size = 5) +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_color_manual(values = c(`TRUE` = "#D95F02", `FALSE` = "#1B9E77"), guide = "none") +
-  scale_x_continuous(breaks = brks, labels = labs) +
-  labs(x = "log2(OR)",y = NULL) +
-  facet_grid(.~ contrast) +
-  theme_bw(base_size = 8)
-puri_plot
-ggsave('~/symlinks/comp/figures/20260406_PurifiedBranches_Log2Odds.pdf',puri_plot,height=3,width=5)
-
-##### Second, compare exact homeologs #####
+##### Compare exact homeologs #####
 homeolog_diff <- wstats_clean %>% 
   # filtered for matched IDs (both homeologs) from the same genes 
   group_by(Gene,ID) %>% 
@@ -4724,7 +4670,6 @@ homeo_puri_plot_or <- ggplot(log2or_by_ID, aes(x = log2OR, y = Group)) +
 homeo_puri_plot_or
 ggsave('~/symlinks/comp/figures/20260414_logOR_Homeolog_PurifiedBranches.pdf',homeo_puri_plot,height=3,width=2.5)
 
-
 # extract top 
 puri_cands <- homeolog_diff2 %>% 
   filter(ID == 'C' | ID == 'J') %>% 
@@ -4766,58 +4711,6 @@ summarize_branch_metrics <- function(df) {
 # apply 
 branch_summ <- summarize_branch_metrics(wstats_clean)
 branch_summ 
-
-##### Plot dNdS on the tree: lwd and color POSITIVE #####
-# Limits for the plot 
-omega_limits <- range(branch_summ$med_omega, na.rm = TRUE)
-pos_limits <- range(branch_summ$pos_frac, na.rm = TRUE)
-probs <- c(0.10, 0.30, 0.70, 0.90)
-breaks <- round(quantile(branch_summ$med_omega, probs = probs, na.rm = TRUE, names = FALSE),2)
-colors <- viridis(length(breaks) + 1, option = "plasma")
-
-# now throw that on the trees
-plot_branch_summary_tree <- function(tr, branch_summ, subset_id, title = NULL, expand_x = 1.3) {
-  # Build tree data and join branch summaries
-  td <- fortify(tr) %>% 
-    dplyr::left_join(
-      branch_summ %>% 
-        dplyr::filter(Subset == subset_id) %>% 
-        mutate(Branch = ifelse(Subset != '22',gsub('[1|2]$','',Branch),Branch)),
-      by = c("label" = "Branch"))
-  
-  # Base tree
-  p <- ggtree(tr) %<+% td +
-    geom_tree(aes(color = med_omega, linewidth = pos_frac)) +
-    geom_tiplab(size = 3.0) +
-    theme_tree() +
-    labs(title = paste0("Subset ", subset_id)) +
-    scale_color_stepsn(
-      name    = "Median dN/dS",
-      colors  = colors,
-      breaks  = breaks,
-      limits  = omega_limits,
-      na.value = "grey80"
-    ) +
-    scale_linewidth_continuous(
-      name  = "Frac FDR<0.1 & dnds>1",
-      range = c(0.5, 2.5),limits=pos_limits)
-  
-  # Expand x-axis to create room for tip labels
-  xmax <- max(p$data$x, na.rm = TRUE)
-  p <- p + ggplot2::xlim(0, xmax * expand_x)
-  
-  return(p)
-}
-
-
-pA  <- plot_branch_summary_tree(tr_A,  branch_summ, subset_id = "A")
-pB  <- plot_branch_summary_tree(tr_B,  branch_summ, subset_id = "B")
-p22 <- plot_branch_summary_tree(tr_22, branch_summ, subset_id = "22")
-allplot <- ggarrange(pA,pB,p22,nrow=1,common.legend = TRUE)
-allplot
-ggsave('~/symlinks/comp/figures/20260319_Subgenome_dNdS_BranchColors.pdf',
-       allplot,height=4,width=8)
-
 
 ##### Plot dNdS on the tree: lwd and color PURIFYING #####
 
@@ -4889,10 +4782,9 @@ td <- fortify(tr_A)
 td %>% filter(label %in% branch_summ$Branch) %>% count(isTip)
 
 ##### A vs B: branch‑wise comparison plots #####
-#### Positive selection A/B
 subg_sel <- counts %>%
   left_join(md) %>% 
-  mutate(pos_frac = pos/total, puri_frac = puri/total) %>% 
+  mutate(puri_frac = puri/total) %>% 
   separate(Localization, into = c('Subset','Subg'),remove=TRUE) %>% 
   pivot_wider(names_from=Subg, id_cols = c(ID,Group,Subset), values_from = puri_frac) %>% 
   filter(Subset == 'Shared') %>% 
@@ -4911,41 +4803,9 @@ subg_sel <- counts %>%
 subg_sel
 ggsave('~/symlinks/comp/figures/20260406_SubgenomeFraction_Purifying.pdf',subg_sel,height=5,width=7)
 
-##### OF those branches (C) with high A/B variation: what are the top candidates? ######
-gene_pair <- wstats_clean %>%
-  filter(Localization %in% c("Shared_A", "Shared_B"), ID == "C") %>%
-  group_by(Gene, Localization) %>%
-  summarise(
-    omega_med = median(omega, na.rm = TRUE),
-    puri_frac = mean(puri, na.rm = TRUE),
-    pos_frac = mean(pos, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
-  ) %>%
-  pivot_wider(
-    names_from = Localization,
-    values_from = c(omega_med, puri_frac, pos_frac, n),
-    names_sep = "."
-  ) %>%
-  mutate(
-    log2_omega_ratio = log2((omega_med.Shared_A + 1e-6)/(omega_med.Shared_B + 1e-6)),
-    delta_puri = puri_frac.Shared_A - puri_frac.Shared_B,
-    category = case_when(
-      puri_frac.Shared_A >= 0.5 & puri_frac.Shared_B <= 0.1 &
-        pos_frac.Shared_B <= 0.05 & log2_omega_ratio < -1 ~ "A_biased_purifying",
-      puri_frac.Shared_B >= 0.5 & puri_frac.Shared_A <= 0.1 &
-        pos_frac.Shared_A <= 0.05 & log2_omega_ratio > 1 ~ "B_biased_purifying",
-      TRUE ~ "other"
-    )
-  )
-top_puri_genes <- gene_pair %>% dplyr::select(Gene,category) %>% filter(category != 'other')
+##### Also just grab the unique C branch genes? ######
 top_puri_uniq <- wstats_clean %>% filter(ID == 'C' & puri == TRUE & grepl('Unique',Localization))  %>% dplyr::select(Gene,category=Localization)
-top_puri <- rbind(top_puri_genes,top_puri_uniq)
-write.table(top_puri,file='TopGenes_Puri_20260406.tsv',quote=F,sep='\t',row.names=F)
-
-# also save full file with the gene pair dnds 
-savedf <- gene_pair %>% dplyr::select(Gene, omega_med.Shared_A, omega_med.Shared_B, log2_omega_ratio, delta_puri, category)
-write.table(savedf,file='AllGenes_Puri_20260406.tsv',quote=F,sep='\t',row.names=F)
+write.table(top_puri_uniq,file='TopGenes_Puri_20260420.tsv',quote=F,sep='\t',row.names=F)
 
 ```
 
@@ -4981,8 +4841,6 @@ interproscan.sh \
   --cpu 8
 ```
 
-
-
 This maps candidate subgenome-biased purifying-selection genes to GO terms (from InterProScan on *Morus*) and runs Fisher-test GO enrichment (vs a genome-wide universe) to highlight overrepresented functions.
 
 Outputs
@@ -4992,7 +4850,7 @@ Outputs
 - Candidate gene <-> GO table for highlighted terms: `TopGenes_Puri_SubgenomeA_20260406.tsv`
 
 ```R
-setwd("/project/coffea_pangenome/Artocarpus/Comparative_Paper/subgenome_divided_dnds/")
+setwd("~/artocarpus_comparative_genomics/09_subgenome_dnds/")
 # Subgenome-specific selection: functional annotation of genes 
 library(tidyverse)
 library(scales)
@@ -5003,15 +4861,12 @@ library(data.table)
 library(ggrepel)
 
 # Read in genes 
-genes <- read_tsv("TopGenes_Puri_20260406.tsv")
-wstats_clean <- read_tsv("Node_dNdS_20260406-RInput.tsv")
+genes <- read_tsv("TopGenes_Puri_20260420.tsv")
+wstats_clean <- fread("Node_dNdS_20260420-RInput.tsv.gz") %>% as_tibble
 homeo <- read_tsv("TopHomeologs_20260414.tsv")
 
-id <- readr::read_tsv(
-  "/project/coffea_pangenome/Artocarpus/Comparative_Paper/orthofinder/Subgenome_Divided/interproscan/Morus.tsv",
-  col_names = FALSE, show_col_types = FALSE
-) %>%
-  transmute(Gene = X1, source_db = X4, interpro_id = X12, go_raw = X14) %>%
+id <- fread("Morus.tsv.gz") %>% as_tibble %>%
+  transmute(Gene = V1, source_db = V4, interpro_id = V12, go_raw = V14) %>%
   distinct()
 
 gene2go_long <- id %>%
@@ -5030,16 +4885,12 @@ length(universe_genes)
 
 ##### PURIFYING SELECTION #####
 # Candidates 
-sA <- unique(genes$Gene[genes$category == "A_biased_purifying"])
-sB <- unique(genes$Gene[genes$category == "B_biased_purifying"])
 uA <- unique(genes$Gene[genes$category == "Unique_A"])
 uB <- unique(genes$Gene[genes$category == "Unique_B"])
 hC <- homeo %>% filter(ID == 'C' & cand == 'purifying') %>% pull(Gene)
 hJ <- homeo %>% filter(ID == 'J' & cand == 'purifying') %>% pull(Gene)
 pos <- homeo %>% filter(cand == 'positive') %>% pull(Gene)
 
-sA <- intersect(sA, universe_genes)
-sB <- intersect(sB, universe_genes)
 uA <- intersect(uA, universe_genes)
 uB <- intersect(uB, universe_genes)
 hC <- intersect(hC, universe_genes)
@@ -5106,8 +4957,6 @@ enrich_go_fisher <- function(cand_genes, universe_genes, gene2go_annot, ontology
   res
 }
 
-mf_sA <- enrich_go_fisher(sA, universe_genes, gene2go_annot, ontology = "MF")
-mf_sB <- enrich_go_fisher(sB, universe_genes, gene2go_annot, ontology = "MF")
 mf_uA <- enrich_go_fisher(uA, universe_genes, gene2go_annot, ontology = "MF")
 mf_uB <- enrich_go_fisher(uB, universe_genes, gene2go_annot, ontology = "MF")
 mf_hC <- enrich_go_fisher(hC, universe_genes, gene2go_annot, ontology = "MF")
@@ -5115,8 +4964,6 @@ mf_hJ <- enrich_go_fisher(hJ, universe_genes, gene2go_annot, ontology = "MF")
 mf_pos <- enrich_go_fisher(pos, universe_genes, gene2go_annot, ontology = "MF")
 
 plot_df <- bind_rows(
-  mf_sA %>% mutate(Set = "Shared A"),
-  mf_sB %>% mutate(Set = "Shared B"),
   mf_uA %>% mutate(Set = "Unique A"),
   mf_uB %>% mutate(Set = "Unique B"),
   mf_hC %>% mutate(Set = "Homeologs C"),
@@ -5243,13 +5090,13 @@ library(readr)
 library(ggrepel)
 
 # Read in top puri genes from scan 
-genes <- read_tsv("/project/coffea_pangenome/Artocarpus/Comparative_Paper/subgenome_divided_dnds/TopGenes_Puri_SubgenomeA_20260406.tsv")
+genes <- read_tsv("~/artocarpus_comparative_genomics/09_subgenome_dnds/TopHomeologs_20260414.tsv")
 
 # import dnds for shared copies of all paired genes 
-savedf <- read_tsv('/project/coffea_pangenome/Artocarpus/Comparative_Paper/subgenome_divided_dnds/AllGenes_Puri_20260406.tsv')
+wstats_clean <- fread('~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz') %>% as_tibble
 
 # read in morus ~ arto/bato gene ID lookups
-ids <- read_tsv('Morus_Lookup.tsv',col_names = F)
+ids <- read_tsv('~/artocarpus_comparative_genomics/10_subgenome_expression/Morus_Lookup.tsv',col_names = F)
 names(ids) <- c('Morus','RBH')
 
 # read in isoseq data, first for artocarpus
@@ -5295,60 +5142,165 @@ hart_tpm2 <- hart_tpm %>%
     )
   )
 
+
+### batocarpus
+samples_b <- samples %>% filter(prefix != "HART063")
+files_b <- samples_b$quant
+names(files_b) <- samples_b$sample
+txi_b <- tximport(files_b, type = "salmon", txOut = TRUE, ignoreTxVersion = TRUE)
+
+# convert to tpm martrix
+bato_tpm <- as_tibble(txi_b$abundance, rownames = "RBH") %>%
+  pivot_longer(-RBH, names_to = "sample", values_to = "TPM") %>%
+  left_join(samples_b, by = "sample")
+
+# map to hart
+bato_tpm2 <- bato_tpm %>%
+  left_join(ids, by = "RBH") 
+
+bato_gene <- bato_tpm2 %>%
+  filter(!is.na(Morus)) %>%
+  group_by(Morus, tissue) %>%
+  summarise(TPM_bato = sum(TPM, na.rm = TRUE), .groups = "drop")
+
 # sumarize Arto A/B to Morus
 hart_AB <- hart_tpm2 %>%
   filter(!is.na(Morus), !is.na(subgenome)) %>%
   group_by(Morus, tissue, subgenome) %>%
   summarize(TPM = sum(TPM, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = subgenome, values_from = TPM, values_fill = 0) %>%
+  pivot_wider(names_from = subgenome, values_from = TPM, values_fill = NA) %>%
   mutate(
     total_AB = A + B,
     log2_BA = log2((B + 1) / (A + 1))
   )
-write_tsv(hart_AB,   "hart_AB.tsv")
+write_tsv(hart_AB, "~/artocarpus_comparative_genomics/10_subgenome_expression/hart_AB.tsv")
+write_tsv(bato_gene, "~/artocarpus_comparative_genomics/10_subgenome_expression/batocarpus.tsv")
+hart_AB <- read_tsv('~/artocarpus_comparative_genomics/10_subgenome_expression/hart_AB.tsv')
+bato_gene <- read_tsv('~/artocarpus_comparative_genomics/10_subgenome_expression/batocarpus.tsv')
 
-# Plot log2(B/A) expression across purifying categories
-exp_omega <- left_join(hart_AB %>% dplyr::rename(Gene = Morus),savedf %>% mutate(omega_diff = omega_med.Shared_A - omega_med.Shared_B)) %>% drop_na(category)
+##### For each selection regime, compare arto/bato expression #####
+outgroups <- wstats_clean %>% 
+  filter(grepl('HART063|Bato',Branch)) %>% 
+  dplyr::select(Gene,Branch,puri) %>% 
+  pivot_wider(names_from = Branch,values_from = puri) %>% 
+  drop_na(Batocarpus) %>% 
+  mutate(purifying_arto = case_when(
+    is.na(HART063B) & is.na(HART063A) ~ NA,
+    is.na(HART063B) & !is.na(HART063A) ~ HART063A,
+    !is.na(HART063B) & is.na(HART063A) ~ HART063B,
+    HART063A == TRUE | HART063B == TRUE ~ TRUE,
+    HART063A == FALSE & HART063B == FALSE ~ FALSE),
+    subset = case_when(
+      is.na(HART063B) & is.na(HART063A) ~ NA,
+      is.na(HART063B) & !is.na(HART063A) ~ 'A-unique',
+      !is.na(HART063B) & is.na(HART063A) ~ 'B-unique',
+      !is.na(HART063B) & !is.na(HART063A) ~ 'Homeologs')
+  ) %>% 
+  drop_na(purifying_arto) %>%
+  dplyr::select(Gene,purifying_bato = Batocarpus,purifying_arto,subset) %>% 
+  mutate(category = case_when(
+    purifying_bato == TRUE & purifying_arto == TRUE ~ 'Both',
+    purifying_bato == FALSE & purifying_arto == TRUE ~ 'Arto-only',
+    purifying_bato == TRUE & purifying_arto == FALSE ~ 'Bato-only',
+    purifying_bato == FALSE & purifying_arto == FALSE ~ 'Neither',
+    TRUE ~ NA
+  ))
 
-# reduce to gene level 
-exp_gene <- exp_omega %>%
-  group_by(Gene, category) %>%
-  summarise(mean_log2_BA = mean(log2_BA, na.rm = TRUE), .groups = "drop")
-pairwise.wilcox.test(exp_gene$mean_log2_BA, exp_gene$category, p.adjust.method = "holm")
+unique_subs <- c("A-unique","Homeologs","B-unique")
+unique_cats <- c('Arto-only','Both','Neither','Bato-only')
 
-# plot it 
-plot_sum <- exp_gene %>%
-  mutate(category = factor(category,
-                           levels = c("A_biased_purifying", "other", "B_biased_purifying"))) %>%
-  group_by(category) %>%
+unique_df <- hart_AB %>%
+  dplyr::rename(Gene = Morus) %>%
+  mutate(
+    subset = case_when(
+      is.na(A) ~ 'B-unique',
+      is.na(B) ~ 'A-unique',
+      !is.na(A) & !is.na(B) ~ 'Homeologs',
+      TRUE ~ NA
+    ),
+    TPM_present = case_when(
+      is.na(A) ~ B,
+      is.na(B) ~ A,
+      !is.na(A) & !is.na(B) ~ total_AB,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  drop_na(TPM_present) %>% 
+  dplyr::select(Gene,tissue,subset,TPM_present) %>% 
+  left_join(bato_gene %>% dplyr::rename(Gene = Morus), by = c("Gene", "tissue")) %>%
+  filter(!is.na(TPM_bato)) %>%
+  mutate(log2_Arto_vs_Bato = log2((TPM_present + 1) / (TPM_bato + 1)))
+
+unique_gene <- unique_df %>%
+  left_join(outgroups %>% dplyr::select(Gene, subset, category)) %>% 
+  drop_na(category) %>% 
+  group_by(Gene, subset, category) %>%
+  summarise(mean_log2_Arto_vs_Bato = mean(log2_Arto_vs_Bato, na.rm = TRUE), .groups = "drop") %>%
+  mutate(subset = factor(subset, levels = unique_subs),
+         category = factor(category, levels = unique_cats))
+write_tsv(unique_gene,'~/artocarpus_comparative_genomics/10_subgenome_expression/20260420_ExpressionSelectionlog2-ArtocarpusBatocarpus.tsv')
+
+unique_w0 <- unique_gene %>%
+  group_by(subset,category) %>%
   summarise(
-    mean = mean(mean_log2_BA, na.rm = TRUE),
-    sd = sd(mean_log2_BA, na.rm = TRUE),
+    n = n(),
+    p_value = wilcox.test(mean_log2_Arto_vs_Bato, mu = 0)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p_value, method = "holm"),
+    sig = case_when(
+      p_adj <= 0.05  ~ "*",
+      TRUE ~ "ns"
+    )
+  )
+
+unique_sum <- unique_gene %>%
+  group_by(subset,category) %>%
+  summarise(
+    mean = mean(mean_log2_Arto_vs_Bato),
+    sd = sd(mean_log2_Arto_vs_Bato),
     n = n(),
     se = sd / sqrt(n),
     conf_low = mean - 1.96 * se,
     conf_high = mean + 1.96 * se,
     .groups = "drop"
-  )
+  ) %>%
+  left_join(unique_w0) %>%
+  mutate(y_lab = pmax(conf_high, 0) + 0.05 * diff(range(c(conf_low, conf_high), na.rm = TRUE)))
 
-exp_plot <- ggplot(plot_sum, aes(x = category, y = mean, color = category)) +
+# subset    category     mean    sd     n     se conf_low conf_high  p_value   p_adj sig   y_lab
+# <fct>     <fct>       <dbl> <dbl> <int>  <dbl>    <dbl>     <dbl>    <dbl>   <dbl> <chr> <dbl>
+#   1 A-unique  Arto-only -0.0786  1.87    68 0.226   -0.522     0.365  0.246    0.492   ns    0.487
+# 2 A-unique  Both      -0.447   1.65    97 0.167   -0.775    -0.119  0.00138  0.0124  *     0.122
+# 3 A-unique  Neither   -0.246   1.84   432 0.0888  -0.420    -0.0722 0.000291 0.00320 *     0.122
+# 4 A-unique  Bato-only -0.267   1.72   173 0.131   -0.524    -0.0108 0.00687  0.0481  *     0.122
+# 5 Homeologs Arto-only  0.383   1.63   164 0.127    0.134     0.633  0.0101   0.0506  ns    0.754
+# 6 Homeologs Both       0.182   1.63   425 0.0789   0.0271    0.337  0.127    0.380   ns    0.458
+# 7 Homeologs Neither    0.0689  1.91   451 0.0899  -0.107     0.245  0.739    0.739   ns    0.367
+# 8 Homeologs Bato-only  0.261   1.67   390 0.0848   0.0945    0.427  0.0151   0.0602  ns    0.549
+# 9 B-unique  Arto-only -1.23    2.02    48 0.291   -1.81     -0.663  0.000121 0.00146 *     0.122
+# 10 B-unique  Both      -0.489   1.36    67 0.166   -0.814    -0.164  0.00796  0.0481  *     0.122
+# 11 B-unique  Neither   -0.364   2.06   263 0.127   -0.613    -0.115  0.00315  0.0252  *     0.122
+# 12 B-unique  Bato-only -0.513   1.86   153 0.150   -0.808    -0.218  0.000821 0.00821 *     0.122
+
+p_unique <- ggplot(unique_sum, aes(x = subset, y = mean, fill = category,shape=category)) +
   geom_hline(yintercept = 0, linetype = 2, color = "grey55") +
-  geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.10, linewidth = 0.7) +
-  geom_point(size = 2.8) +
-  scale_color_manual(values = c(
-    "A_biased_purifying" = "#1b9e77",
-    "other" = "grey55",
-    "B_biased_purifying" = "#d95f02"
-  )) +
-  labs(x = NULL, y = "Mean log2(B/A) expression per gene") +
-  theme_bw(base_size = 9) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank(),
-    axis.text.x = element_text(face = "bold")
-  )
+  geom_errorbar(aes(color = category, ymin = conf_low, ymax = conf_high), width = 0.12, linewidth = 0.7,position=position_dodge(width=0.5)) +
+  geom_point(size = 1.8,position=position_dodge(width=0.5)) +
+  geom_text(aes(y = y_lab, label = sig), color = "black", size = 2, vjust = 0,position=position_dodge(width=0.5)) +
+  scale_fill_manual(values = viridis(4)) +
+  scale_color_manual(values = viridis(4)) +
+  scale_shape_manual(values=c(21,24,25,22))+
+  labs(x = NULL, y = "Mean log2(Arto/Bato expression ratio)") +
+  theme_bw(base_size = 10) +
+  theme(legend.position = "top", panel.grid.minor = element_blank(),
+        axis.text.x = element_text(face = "bold")) +
+  coord_flip()
 
-ggsave('~/symlinks/comp/figures/20260406_Expression_Bias_Subgenome.pdf',exp_plot,height=2.5,width=1.5)
+p_unique
+
+ggsave('~/artocarpus_comparative_genomics/figures/20260420_Expression_Bias_Subgenome.pdf',p_unique,height=3.5,width=2.5)
 
 ```
 
