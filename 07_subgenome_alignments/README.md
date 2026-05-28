@@ -2,9 +2,9 @@
 
 Compare variation between Batocarpus and Artocarpus by delineating Artocarpus subgenomes, and then using comparative and phylogenetic approaches. 
 
-This section will give parts A & B:
+This section will give:
 
-![busco](/figures/20260318_panel_BUSCO_Synteny_SubTreeSimple.png)
+![busco](/figures/20260528_panel_BUSCO_Synteny.png)
 
 ___
 

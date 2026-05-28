@@ -1,0 +1,16 @@
+topology	count
+Ficus,(((ArtoA,ArtoB),Bato),Morus)	240
+Ficus,(((ArtoA,ArtoB),Morus),Bato)	3
+Ficus,(((ArtoA,Bato),ArtoB),Morus)	3625
+Ficus,(((ArtoA,Bato),Morus),ArtoB)	49
+Ficus,(((ArtoA,Morus),ArtoB),Bato)	1
+Ficus,(((ArtoA,Morus),Bato),ArtoB)	3
+Ficus,(((ArtoB,Bato),ArtoA),Morus)	231
+Ficus,(((ArtoB,Bato),Morus),ArtoA)	14
+Ficus,(((ArtoB,Morus),ArtoA),Bato)	3
+Ficus,(((ArtoB,Morus),Bato),ArtoA)	1
+Ficus,(((Bato,Morus),ArtoA),ArtoB)	5
+Ficus,(((Bato,Morus),ArtoB),ArtoA)	3
+Ficus,((ArtoA,ArtoB),(Bato,Morus))	6
+Ficus,((ArtoA,Bato),(ArtoB,Morus))	31
+Ficus,((ArtoA,Morus),(ArtoB,Bato))	5

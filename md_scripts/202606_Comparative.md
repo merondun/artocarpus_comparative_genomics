@@ -3055,6 +3055,12 @@ ggsave('~/symlinks/comp/figures/20260218_CAR_Ancestral_Sequences.pdf',
 
 Compare variation between Batocarpus and Artocarpus by delineating Artocarpus subgenomes, and then using comparative and phylogenetic approaches. 
 
+This section will give:
+
+![busco](/figures/20260528_panel_BUSCO_Synteny.png)
+
+___
+
 ## Delineate Artocarpus subgenomes
 
 Based on the WGA, there are consistently 2 chrs from Artocarpus that align to Batocarpus. Identify those pairs:
@@ -3751,9 +3757,21 @@ ggsave('~/symlinks/comp/figures/20260416_SubgenomeChrSizeBUSCO_Boxes.pdf',both,h
 
 ```
 
+
+
 ## Subgenome-divided Orthofinder
 
 This section continues the subgenome-specific evolution analyses, dealing with Artocarpus A/B (HART067), Batocarpus, and Morus.
+
+The results of this section correspond to panel B showing missing orthogroups across subgenomes:
+
+![cafe5](/figures/20260413_Annotation_Counts_Orthogroups.png)
+
+
+
+____
+
+
 
 For most analyses, I will only run with Morus as the outgroup since that's deep enough. However, for proper rooting, I will first run an orthofinder run to get a species tree that is properly rooted with Ficus:
 
@@ -3965,7 +3983,15 @@ ggsave('~/symlinks/comp/figures/20260413_Orthogroup_Missingness.pdf',op,height=5
 
 This workflow splits CDS FASTAs into subgenome (A/B) partitions using chromosome haplotype lists, then identifies orthologous CDS sets via reciprocal best‑hit BLAST using *Morus* as the anchor reference. Per-gene multi-sample CDS alignments are built, filtered, and pruned to matching taxa, and HyPhy (MG94) is run on each gene to estimate branch-specific dN/dS across the tree.
 
-Primary outputs
+Primary outputs:
+
+Panels a-c showing variation in selection across subgenomes:
+
+![subgenome](/figures/20260420_SubgenomeEvolution.png)
+
+____
+
+Working files:
 
 - Subgenome CDS FASTAs: `*A.fa`, `*B.fa` (plus outgroup FASTAs in `cds_files/`).
 - RBH ortholog pairs: `blast/RBH_Morus_<SAMPLE>.txt` and per-gene sequence folders: `genes/<Morus_gene>/*.fa`.
@@ -5037,17 +5063,17 @@ write_tsv(cands,file='TopGenes_Puri_SubgenomeA_20260406.tsv')
 
 ```
 
-## Ficus: Subgenome-divided dNdS
 
-This workflow splits CDS FASTAs into subgenome (A/B) partitions using chromosome haplotype lists, then identifies orthologous CDS sets via reciprocal best‑hit BLAST using *Morus* as the anchor reference. Per-gene multi-sample CDS alignments are built, filtered, and pruned to matching taxa, and HyPhy (MG94) is run on each gene to estimate branch-specific dN/dS across the tree.
 
-Primary outputs
+## Subgenome-divided BEAST
 
-- Subgenome CDS FASTAs: `*A.fa`, `*B.fa` (plus outgroup FASTAs in `cds_files/`).
-- RBH ortholog pairs: `blast/RBH_Morus_<SAMPLE>.txt` and per-gene sequence folders: `genes/<Morus_gene>/*.fa`.
-- Per-gene multi-FASTA alignments: `raw/<gene>.fa`.
-- HyPhy per-gene results: `hyphy_out/<gene>.tsv` and `hyphy_out/<gene>.tree.nwk` (+ `*.skip.txt` for filtered genes).
-- Compiled table: `Node_dNdS_20260406.tsv`.
+This workflow repeats the general process from [subgenome_divided_dnds](/09_subgenome_dnds/) except it includes *Ficus carica* as a more distant outgroup. 
+
+Outputs:
+
+Panel a from:
+
+![beast](/20260528_GeneTrees_BEAST_kS.png)
 
 Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
 
@@ -6096,6 +6122,18 @@ cp ./rate_adjustment/arto/tree_arto_distances.pdf . # kS scaled branch length tr
 
 This builds 5-taxon ortholog quintets (Ficus–Morus–Batocarpus–ArtocarpusA–ArtocarpusB) via reciprocal best-hit BLAST, aligns each quintet, and infers gene trees (IQ-TREE), and summarizes gene-tree/species-tree discordance by topology counting.
 
+Primary output:
+
+Panel b from:
+
+![discordance](20260528_GeneTrees_BEAST_kS.png)
+
+
+
+___
+
+
+
 Outputs
 
 - Input quintet: `quintets/Ficus_Morus_Bato_ArtoA_ArtoB.unique.tsv`
@@ -6554,6 +6592,23 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
+Summarize:
+
+```
+python Count_Topologies.py -i trees/ -o Ficus --output topos
+```
+
+```
+head topology_counts.tsv
+topology        count
+Ficus,(((ArtoA,ArtoB),Bato),Morus)      240
+Ficus,(((ArtoA,ArtoB),Morus),Bato)      3
+Ficus,(((ArtoA,Bato),ArtoB),Morus)      3625
+Ficus,(((ArtoA,Bato),Morus),ArtoB)      49
+```
+
+
 
 ### Plot Discordance
 
