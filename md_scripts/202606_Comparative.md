@@ -1772,6 +1772,8 @@ for REF in N15_23 HART063; do
 done
 ```
 
+
+
 ## Formatting for Downstream
 
 First, subset the files we want, and then create a tab delim file with gene info, including chromosome and function.
@@ -3971,6 +3973,8 @@ Primary outputs
 - HyPhy per-gene results: `hyphy_out/<gene>.tsv` and `hyphy_out/<gene>.tree.nwk` (+ `*.skip.txt` for filtered genes).
 - Compiled table: `Node_dNdS_20260406.tsv`.
 
+Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
+
 ```bash
 # Config
 CHR_DIR="chrs"            # dir containing per-chromosome FASTAs
@@ -4489,6 +4493,10 @@ hist(wstats_clean$omega)
 fwrite(wstats_clean,'~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz')
 wstats_clean <- fread('~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz') %>% as_tibble %>% 
   filter(!grepl('^A$|^B$|Morus|Batocarpus',Branch)) 
+
+# for 4fold: extract the genes with all tips
+beasts <- wstats_clean %>% filter(n_A_tips == 9 & n_B_tips == 9) %>% pull(Gene) %>% unique
+write.table(beasts,file='20260422_FullTreeGenes.list',quote=F,sep='\t',row.names=F,col.names = F)
 
 # First, aggregate: compare # purified genes to total for each branch 
 # Build per-ID counts
@@ -5029,6 +5037,596 @@ write_tsv(cands,file='TopGenes_Puri_SubgenomeA_20260406.tsv')
 
 ```
 
+## Ficus: Subgenome-divided dNdS
+
+This workflow splits CDS FASTAs into subgenome (A/B) partitions using chromosome haplotype lists, then identifies orthologous CDS sets via reciprocal best‑hit BLAST using *Morus* as the anchor reference. Per-gene multi-sample CDS alignments are built, filtered, and pruned to matching taxa, and HyPhy (MG94) is run on each gene to estimate branch-specific dN/dS across the tree.
+
+Primary outputs
+
+- Subgenome CDS FASTAs: `*A.fa`, `*B.fa` (plus outgroup FASTAs in `cds_files/`).
+- RBH ortholog pairs: `blast/RBH_Morus_<SAMPLE>.txt` and per-gene sequence folders: `genes/<Morus_gene>/*.fa`.
+- Per-gene multi-FASTA alignments: `raw/<gene>.fa`.
+- HyPhy per-gene results: `hyphy_out/<gene>.tsv` and `hyphy_out/<gene>.tree.nwk` (+ `*.skip.txt` for filtered genes).
+- Compiled table: `Node_dNdS_20260406.tsv`.
+
+Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
+
+```bash
+# Config
+CHR_DIR="chrs"            # dir containing per-chromosome FASTAs
+OUTDIR="."                # where to write SAMPLE_A.fa, SAMPLE_B.fa
+HAPS=("A.haps" "B.haps")  # haplotype lists to process
+SAMPLE_LIST="CompSamples.list"
+
+# Sanity checks
+for hap in "${HAPS[@]}"; do
+  [[ -s "$hap" ]] || { echo "ERROR: Hap file '$hap' missing or empty." >&2; exit 1; }
+done
+[[ -d "$CHR_DIR" ]] || { echo "ERROR: Chromosome directory '$CHR_DIR' not found." >&2; exit 1; }
+[[ -s "$SAMPLE_LIST" ]] || { echo "ERROR: Sample list '$SAMPLE_LIST' missing or empty." >&2; exit 1; }
+
+# Process each sample
+while IFS=$'\r' read -r SAMPLE || [[ -n "$SAMPLE" ]]; do
+  # Skip blanks and comments
+  [[ -z "$SAMPLE" || "$SAMPLE" =~ ^# ]] && continue
+
+  for hap in "${HAPS[@]}"; do
+    # Derive suffix "A" or "B" from filename (before first dot)
+    suffix="${hap%%.*}"
+    out="${OUTDIR}/${SAMPLE}${suffix}.fa"
+    # Truncate/initialize output
+    : > "$out"
+
+    echo "Building ${out} from ${hap}…"
+
+    # Read chromosomes in order from hap file
+    while IFS=$'\r' read -r CHR || [[ -n "$CHR" ]]; do
+      # Skip blanks/comments
+      [[ -z "$CHR" || "$CHR" =~ ^# ]] && continue
+
+      chr_file="${CHR_DIR}/${SAMPLE}_${CHR}.fa"
+      if [[ -s "$chr_file" ]]; then
+
+          # Rewrite headers so `>SAMPLE_...` becomes `>SAMPLESUFFIX_...` (e.g., HART001A_...)
+          awk -v s="$SAMPLE" -v suf="$suffix" '
+            BEGIN { OFS="" }
+            /^>/ {
+              # Only modify headers that begin with the exact sample ID
+              if ($0 ~ "^>" s) {
+                sub("^>" s, ">" s suf);
+              }
+              print; next
+            }
+            { print }
+          ' "$chr_file" >> "$out"
+
+      else
+        echo "WARNING: Missing file: ${chr_file} (skipping)" >&2
+      fi
+    done < "$hap"
+
+    echo "Done: ${out}"
+  done
+  
+done < "$SAMPLE_LIST"
+```
+
+Copy the files:
+
+```bash
+cp *A.fa *B.fa Batocarpus.fa Morus.fa ~/symlinks/comp/subgenome_divided_dnds/cds_files
+```
+
+This will output:
+
+```
+ls cds_files/*fa
+cds_files/Batocarpus.fa  cds_files/HART001B.fa  cds_files/HART058A.fa  cds_files/HART060B.fa  cds_files/HART062A.fa  cds_files/HART063B.fa  cds_files/HART068A.fa  cds_files/N9750A.fa
+cds_files/Ficus.fa       cds_files/HART027A.fa  cds_files/HART058B.fa  cds_files/HART061A.fa  cds_files/HART062B.fa  cds_files/HART067A.fa  cds_files/HART068B.fa  cds_files/N9750B.fa
+cds_files/HART001A.fa    cds_files/HART027B.fa  cds_files/HART060A.fa  cds_files/HART061B.fa  cds_files/HART063A.fa  cds_files/HART067B.fa  cds_files/Morus.fa
+
+head cds_files/HART061A.fa
+>HART061A_000001-R1
+ATGATCATGTCTTCAAAAGGGTGTTTAGAGGAGATGGGAATATCTTCAACTAATATCAGT
+GATGGTGGGAAAAATTGCTATAGAGGCCATTGGAGACCTGCGGAAGACGAGAAACTCCGA
+CAACTCGTCGAACAATACGGTCCTCAGAACTGGAATTTCATCGCCGAGCATCTACAAGGA
+AGATCAGGAAAAAGTTGCCGATTGAGATGGTACAACCAACTAGACCCAAACATCAACAAG
+AAGCCTTTCACAGAAGAAGAGGAAGAGAGGCTGCTTTCCGCCCACCGGATTTACGGCAAC
+AAATGGGCTTACATAGCCAAGTATTTCCAAGGAAGAACCGACAACGCCGTCAAGAACCAT
+TACCATGTCGTCATGGCAAGGCGAAAGCGAGAGCGCTTCACGCAGTACCACCatcataat
+cataatcataatcatgatcattatcattatcatTATAGCAGGTCTACTTGTACTCCTAAT
+CATCTTGATCAAGGTTCTTCTAATGGGAATGTTAATATTCCTCCAAAATTAGGGCTTCTC
+(earlgrey722) [justin.merondun@ceres20-compute-22 deeper_subgenome_dnds]$ head cds_files/Ficus.fa 
+>Ficus_000001-R1
+ATGATGACGGGACACAGCGGGAAGATCACGGAGGAGCAGAAGTCCCAAATATGCAGCTTC
+ATCGACTGCAACAAGCTCTCCCACAAGCTCCTCCTTGGCGCCGTCCAAAACCCCCTCATG
+CCTCTCCGCTTCGTCGTCCGCGCCATGTTCGCCGACCAGCTTAACACCCGCCGCTGCATC
+Atctccgccgccgccaccgccccctccacctcctcccaccaccaccgccgccgccacagc
+gacTCTCCTACTCCATCTGCCATGACCCTCGGTGCCCTCCTCCAGCGCGACGCCGCCATC
+AGCCAGGCCTCGCAGCTCAAGGCCACCCTCGACGCCACCACCCGCCGCATCCGCAGCCTG
+GAGGAGGAGCTCTCCGGCATGAAGAAGCTCCTCATCTTGCAAAACTCCGATCAGGACCGC
+CATCGGAGCCTCGTTATGGACCGATCCGCCGGACGATCCGCCAGCTTCCATGTCGGATCG
+GAGAATACTAATAAGGTCAAGAAAGAGGACAGATTCTCCGCTTCGTCGGCGAGGTTTCAT
+```
+
+1. This takes a reference sample (Ficus), performs reciprocal best‑hit BLAST searches against all other samples, extracts matching CDS sequences and outputs them into a directory named after the Ficus gene in `/genes/` 
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=2-00:00:00   
+#SBATCH --nodes=1  
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32Gb
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+#module load miniconda
+#source activate isoseq_ann
+
+JOBS=16
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/deeper_subgenome_dnds
+cd ${WD}
+
+# Submit with sample 
+B="${1:?usage: $0 <SAMPLE>}"
+first=0
+[ "$B" = "Batocarpus" ] && first=1
+[ "$B" = "Morus" ] && first=1
+
+# dNdS Across tree 
+A="Ficus"
+Af="cds_files/${A}.fa"
+
+# output dirs
+mkdir -p blast db genes
+
+echo "Blasting ${A} against ${B}"
+Bf="cds_files/${B}.fa"
+
+# Make blast dbs
+if [ ! -f "db/${B}.nhr" ]; then
+makeblastdb -in $Bf -dbtype nucl -out db/${B}
+fi
+if [ ! -f "db/${A}.nhr" ]; then
+makeblastdb -in $Af -dbtype nucl -out db/${A}
+fi
+
+# blast each against the other
+blastn -query $Af -db db/${B} -out blast/${A}_vs_${B}.tsv -outfmt "6 qseqid sseqid pident length evalue bitscore" -max_target_seqs 1 -evalue 1e-5
+blastn -query $Bf -db db/${A} -out blast/${B}_vs_${A}.tsv -outfmt "6 qseqid sseqid pident length evalue bitscore" -max_target_seqs 1 -evalue 1e-5
+
+# sort for best hits 
+sort -k1,1 -k6,6nr blast/${A}_vs_${B}.tsv \
+  | awk -F'\t' '!seen[$1]++ {print $1"\t"$2}' > blast/best_${A}_to_${B}.txt
+sort -k1,1 -k6,6nr blast/${B}_vs_${A}.tsv \
+  | awk -F'\t' '!seen[$1]++ {print $1"\t"$2}' > blast/best_${B}_to_${A}.txt
+awk 'NR==FNR {a[$1]=$2; next} {if (a[$2]==$1) print $2"\t"$1}' \
+  blast/best_${A}_to_${B}.txt \
+  blast/best_${B}_to_${A}.txt \
+  > blast/RBH_${A}_${B}.txt
+
+# Export for parallel subshells
+export WD Af Bf A B first
+
+# SELF per ida, only if first==1; run once per unique ida in parallel ---
+if [ "${first:-0}" -eq 1 ]; then
+  cut -f1 "blast/RBH_${A}_${B}.txt" | sort -u | \
+  parallel --jobs ${JOBS} '
+    ida={}
+    mkdir -p ${WD}/genes/${ida}
+    self="${WD}/genes/${ida}/${A}.fa"
+    # overwrite or create; trimming terminal stop codon
+    samtools faidx "'"$Af"'" "$ida" | sed -E "s/(TAA|TAG|TGA)$//" > "$self"
+  '
+fi
+
+# Extract each idb from Bf in parallel, one file per pair ---
+parallel --jobs ${JOBS} --colsep '\t' '
+  ida={1}; idb={2}
+  mkdir -p ${WD}/genes/${ida}
+  out="${WD}/genes/${ida}/${B}.fa"
+  samtools faidx "'"$Bf"'" "$idb" | sed -E "s/(TAA|TAG|TGA)$//" > "$out"
+' :::: "blast/RBH_${A}_${B}.txt"
+```
+
+Sanity, check number of genes per sample:
+
+```bash
+find genes -maxdepth 2 -type f -printf "%f\n" \
+    | grep -o -f <(sed 's/$/\\.fa/' AllSamples.list) \
+    | sort | uniq -c
+  
+  11411 Batocarpus.fa
+  10571 Ficus.fa
+   9680 HART001A.fa
+   8611 HART001B.fa
+   9429 HART027A.fa
+   8389 HART027B.fa
+   9679 HART058A.fa
+   8190 HART058B.fa
+   9103 HART060A.fa
+   7939 HART060B.fa
+   9428 HART062A.fa
+   8308 HART062B.fa
+   9737 HART063A.fa
+   8943 HART063B.fa
+   9542 HART067A.fa
+   8593 HART067B.fa
+   9011 HART068A.fa
+   7541 HART068B.fa
+  10571 Morus.fa
+   9085 N9750A.fa
+   7861 N9750B.fa
+```
+
+Concatenate the alignents:
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=2-00:00:00
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=64Gb
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+set -euo pipefail
+
+module load parallel
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/deeper_subgenome_dnds
+SRC="${WD}/genes"
+OUT="${WD}/raw"
+JOBS=48
+
+mkdir -p "$OUT"
+
+export SRC OUT
+
+find "$SRC" -mindepth 1 -maxdepth 1 -type d | \
+parallel -j ${JOBS} '
+  d={}
+  gene=$(basename "$d")
+  out="${OUT}/${gene}.fa"
+  tmp=$(mktemp "${OUT}/.${gene}.XXXXXX")
+
+  # require Ficus.fa, Morus.fa, and Batocarpus.fa to exist and be non-empty
+  [ -s "${d}/Ficus.fa" ] || exit 0
+  [ -s "${d}/Morus.fa" ] || exit 0
+  [ -s "${d}/Batocarpus.fa" ] || exit 0
+
+  # concatenate all non-empty fasta files in sorted filename order
+  find "$d" -maxdepth 1 -type f -name "*.fa" -size +0c -printf "%f\n" \
+    | LC_ALL=C sort \
+    | while read -r f; do
+        cat "${d}/${f}" >> "$tmp"
+      done
+
+  # only keep if something was written
+  if [ -s "$tmp" ]; then
+    mv "$tmp" "$out"
+    echo "Built ${gene}.fa"
+  else
+    rm -f "$tmp"
+  fi
+'
+```
+
+### 4-Fold Sites & Beast
+
+Extract the 4-fold degenerate fasta files:
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=3-00:00:00    
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=64Gb
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+# module load miniconda
+# source activate isoseq_ann
+
+JOBS=48
+LIST="${1:?usage: $0 <genes_list_file>}"
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/deeper_subgenome_dnds
+TREE="${WD}/tree.nwk"
+GENEDIR="${WD}/raw"
+NUM_SAMPS=21
+
+mkdir -p ${WD}/hyphy ${WD}/beast_out ${WD}/beast_out_strict
+
+cd ${WD}
+
+echo "Working on ${LIST}"
+
+# Ensure required tools exist
+for tool in macse clipkit parallel; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool not found in PATH"; exit 1; }
+done
+
+SCR=${SLURM_TMPDIR:-/tmp}
+export WD TREE RUN GENEDIR SCR NUM_SAMPS
+
+process_gene() {
+  local fa="$1"           
+  local gene
+  gene="$(basename "${fa%.fa}")" 
+
+  # quick skip if not enough sequences (require at least 21)
+  seq_count=$(grep -c '^>' "$fa" 2>/dev/null || true)
+  if [ "${seq_count:-0}" -lt ${NUM_SAMPS} ]; then
+    echo "Skipping ${gene}: only ${seq_count} sequences (need >=${NUM_SAMPS})"
+    return 0
+  fi
+
+  # Work in a per-gene dir
+  (
+    # for space limited, replace WD with SCR
+    outdir="${WD}/hyphy/${gene}"
+    mkdir -p "$outdir"
+    cd "$outdir"
+    echo "Working on ${gene}"
+
+    # 1) Align with MACSE
+    macse -prog alignSequences \
+      -seq "${fa}" \
+      -out_NT aln_NT.fasta > macse.log 2>&1
+
+    # 2) Clean alignment
+    macse -prog exportAlignment \
+      -align aln_NT.fasta \
+      -codonForExternalFS --- \
+      -codonForFinalStop --- \
+      -codonForInternalFS --- \
+      -codonForInternalStop --- \
+      -charForRemainingFS - \
+      -out_NT aln_NT.clean.fasta 2>&1
+
+    # 3) Ensure underscores stripped from seq names
+    sed 's/_.*//g' aln_NT.clean.fasta > aln_NT.clean.fa
+
+    # 4) Trim gappy codon positions
+    clipkit aln_NT.clean.fa -o aln_NT.clipkit.fa --codon -m kpic > clipkit.log 2>&1
+
+    # 4b) Create a "strict" codon alignment that drops sequences with >30% gaps
+    seqkit fx2tab aln_NT.clipkit.fa \
+    | awk -F'\t' '
+        {
+          seq = $2
+          gsub(/[^-]/, "", gapped)
+        }
+        {
+          total = length($2)
+          gaps = gsub(/-/, "", $2)
+          if (total > 0 && gaps/total <= 0.30)
+              print $1
+        }
+    ' | seqkit grep -f - aln_NT.clipkit.fa > aln_NT.clipkit.strict.fa
+
+    # Require 21 samples with ATG aligned and extract 
+    python /home/justin.merondun/merothon/merothon/scripts/Extract_4Fold.py -i aln_NT.clipkit.fa -m 21 -o extract
+    cp extract.4fold.fa "${WD}/beast_out/${gene}.fa"
+    
+    # and strict...
+    python /home/justin.merondun/merothon/merothon/scripts/Extract_4Fold.py -i aln_NT.clipkit.strict.fa -m 21 -o extract_strict \
+      || echo "WARN: strict extract failed for ${gene}"
+    [ -f extract_strict.4fold.fa ] && cp extract_strict.4fold.fa "${WD}/beast_out_strict/${gene}.fa"
+    rm *log aln_NT_AA.fasta aln_NT.clean.fasta aln_NT.fasta aln_NT.clean.fa
+
+  )
+}
+
+export -f process_gene
+
+# Run in parallel
+parallel --will-cite -j ${JOBS} process_gene :::: "${LIST}"
+
+# concat and convert
+seqkit concat beast_out/*fa > Subgenomes_4Fold.fa 2> seqkit.concat.log
+seqret -sequence Subgenomes_4Fold.fa -outseq Subgenomes_4Fold.nex -osformat nexus
+
+# concat and convert the STRICT 
+seqkit concat beast_out_strict/*fa > Subgenomes_4Fold_Strict.fa 2> seqkit.strict.concat.log
+seqret -sequence Subgenomes_4Fold_Strict.fa -outseq Subgenomes_4Fold_Strict.nex -osformat nexus
+
+# also creat a full genes file
+find hyphy/ -type f -name "aln_NT.clipkit.strict.fa" -print0 |
+while IFS= read -r -d '' f; do
+    if [ "$(seqkit stat "$f" | awk 'NR==2{print $4}')" -eq 21 ]; then
+        printf '%s\0' "$f"
+    fi
+done | xargs -0 seqkit concat -o Subgenomes_FullGenes_Strict.fa
+seqret -sequence Subgenomes_FullGenes_Strict.fa -outseq Subgenomes_FullGenes_Strict.nex -osformat nexus
+
+# subset 150k codons
+seqkit subseq -r 1:450000 Subgenomes_FullGenes_Strict.fa > Subgenomes_FullGenes_Strict_150k.fa
+seqret -sequence Subgenomes_FullGenes_Strict_150k.fa -outseq Subgenomes_FullGenes_Strict_150k.nex -osformat nexus
+```
+
+Submit:
+
+```
+realpath raw/*fa > raw_genes.list
+sbatch 03_Extract_4Fold.sh raw_genes.list
+```
+
+Count variant and invariant sites in all alignments:
+
+```
+#!/usr/bin/env python3
+import sys
+from itertools import zip_longest
+
+def read_fasta(path):
+    seqs = []
+    seq = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if seq:
+                    seqs.append("".join(seq))
+                    seq = []
+            else:
+                seq.append(line)
+        if seq:
+            seqs.append("".join(seq))
+    return seqs
+
+def count_sites(seqs):
+    invariant = 0
+    variant = 0
+    aln_len = len(seqs[0])
+    for col in zip(*seqs):
+        bases = set(col) - set("-")   # ignore gaps
+        if len(bases) == 1:
+            invariant += 1
+        else:
+            variant += 1
+    return invariant, variant
+
+if __name__ == "__main__":
+    for fa in sys.argv[1:]:
+        seqs = read_fasta(fa)
+        inv, var = count_sites(seqs)
+        print(fa)
+        print("Invariant sites:", inv)
+        print("Variant sites:", var)
+        print()
+```
+
+Count for fastas:
+
+```
+python count_invar.py *.fa
+
+Subgenomes_4Fold.fa
+Invariant sites: 152127
+Variant sites: 100100
+
+Subgenomes_4Fold_Strict.fa
+Invariant sites: 128932
+Variant sites: 85451
+
+Subgenomes_FullGenes_Strict.fa
+Invariant sites: 1645648
+Variant sites: 681245
+
+Subgenomes_FullGenes_Strict_150k.fa
+Invariant sites: 322415
+Variant sites: 127585
+```
+
+
+
+Merge the 4-fold degenerate fasta files and then import them into beauti:
+
+* Gamma model, 4 categories, estimated shape, GTR with estimated frequencies
+* Strict clock, log normal default prior
+* Yule model, tMRCA prior based on [Williams et al 2017 Out of Borneo](https://academic.oup.com/aob/article/119/4/611/2884288) paper: Morus vs Artocarpus/Batocarpus split: 83.8 74.85-92.65 Ma, = mean 83.8, sigma = 4.54
+* 50M chains, log every 5k 
+
+From the paper: 
+
+> In the mid- to late Cretaceous (83·8 Mya, 74·85–92·65 Mya) the stem node of the tribe Artocarpeae diverged from the rest of the family Moraceae. The biogeographical reconstruction infers a likely origin of the tribe in the Americas. The split between American (*Clarisia* and *Batocarpus*) and Asian Artocarpeae (*Artocarpus*) occurred in the Palaeocene (59·67 Mya, 55·24–65·03 Mya) with a radiation of *Artocarpus* from Borneo in the Eocene to Oligocene (40·07 Mya, 29·8–50·81 Mya). 
+
+ALSO run a BEAST analysis with the extra-filtered 4-fold sites, and one with 150k codons from the full gene alignments. 
+
+### Plot BEAST
+
+```R
+#### Plot BEAST annotated trees 
+setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/deeper_subgenome_dnds/beast')
+library(ggtree)
+library(phytools)
+library(ape)
+library(treeio)
+library(viridis)
+library(ggpubr)
+library(RColorBrewer)
+library(tidyverse)
+
+# metadata
+mdraw <-  read_tsv('~/artocarpus_comparative_genomics/samples.txt')
+md1 <- mdraw %>% 
+  mutate(Accession = case_when(
+    Accession == "N97_50" ~ "N9750",
+    Accession == "N15_23" ~ "Batocarpus",
+    TRUE ~ Accession
+  )) %>% 
+  dplyr::select(Accession,Group) %>% 
+  rbind(.,
+        data.frame(
+          Accession = c('Ficus','Morus'),
+          Group = c('Ficus carica','Morus mongolica')
+        ))
+hapa <- md1 %>% filter(grepl('A. ',Group)) %>% 
+  mutate(Accession = paste0(Accession,'A'),
+         Haplotype='A')
+hapb <- md1 %>% filter(grepl('A. ',Group)) %>% 
+  mutate(Accession = paste0(Accession,'B'),
+         Haplotype='B')
+ogs <- md1 %>% filter(!grepl('A. ',Group)) %>% mutate(Haplotype=Accession)
+md <- rbind(hapa,hapb,ogs)
+
+files = list.files('.',paste0('.*ann'))
+
+counter = 0
+for (file in files){
+  counter = counter +  1 
+  iqtree = read.beast(file) 
+  t2 <- drop.tip(iqtree,'Ficus')
+  gg = ggtree(t2,layout='rectangular') %<+% md
+  
+  #add label for 95% CIs
+  lab = gsub('.trees.*','',file)
+  heights = gg$data$height_0.95_HPD
+  df = as.data.frame(do.call(rbind, heights)) #convert the list to a data frame
+  df$node_value = 1:nrow(df) # Add node values as a new column
+  colnames(df) = c("value1", "value2", "node")
+  df = df[, c("node", "value1", "value2")]
+  df = df %>% 
+    mutate(
+      value1 = if (grepl("mu", file)) value1 / 1e6 else value1,
+      value2 = if (grepl("mu", file)) value2 / 1e6 else value2,
+      lab = paste0(round(value1,1),' - ',round(value2,1))) %>% 
+    select(!c(value1,value2))
+  
+  leg = md %>% select(Group,Haplotype) %>% unique
+  gg$data = left_join(gg$data,df)
+  ggp = gg  +
+    geom_range(range='height_0.95_HPD', color='red', alpha=.6, size=2) +
+    geom_tippoint(aes(fill = Haplotype,shape=Haplotype),size=3)+
+    geom_nodelab(aes(label=lab),size=2,vjust=1) +
+    ggtitle(lab)+
+    #geom_tiplab(size=2)+
+    #geom_nodelab(aes(x=branch, label=round(posterior, 2)), vjust=-.5, size=3) +
+    scale_fill_manual(values=c('#0072B2','#E69F00','black','white','purple'))+
+    scale_shape_manual(values=c(21,22,24,25,23))+
+    theme(legend.position=c(.1, .8))+
+    geom_treescale(x = 5)+
+    guides(fill=guide_legend(override.aes=list(shape=21)))+
+    theme(legend.position='right')+
+    geom_tiplab(aes(label=gsub('A. ','',Group)),size=1,hjust=-0.25)+xlim(c(-0.5,max(gg@data$x)*1.2))
+  ggp
+  assign(paste0('p',counter),ggp)
+} 
+
+ggarrange(p1,p2,p3,common.legend = TRUE,nrow=1)
+
+pdf('~/symlinks/comp/figures/20260521_BEAST_Divergence_Dating_All.pdf',height=4,width=9.5)
+ggarrange(p1,p2,p3,common.legend = TRUE,nrow=1)
+dev.off()
+
+```
+
+
+
 
 
 ## Subgenome-specific Expression
@@ -5494,22 +6092,19 @@ cp ./rate_adjustment/arto/orthologs_arto_bato.pdf . # rate-adjusted ortholog dis
 cp ./rate_adjustment/arto/tree_arto_distances.pdf . # kS scaled branch length tree 
 ```
 
+## Quintets: Gene Discordance
 
-
-## Quartet Gene Discordance & BEAST
-
-This builds 4-taxon ortholog quartets (Morus–Batocarpus–ArtocarpusA–ArtocarpusB) via reciprocal best-hit BLAST, aligns each quartet, extracts shared 4-fold degenerate sites, and infers gene trees (IQ-TREE) and a quartet species tree (ASTRAL), and summarizes gene-tree/species-tree discordance by topology counting, and concatenates 4-fold sites for BEAST divergence dating.
+This builds 5-taxon ortholog quintets (Ficus–Morus–Batocarpus–ArtocarpusA–ArtocarpusB) via reciprocal best-hit BLAST, aligns each quintet, and infers gene trees (IQ-TREE), and summarizes gene-tree/species-tree discordance by topology counting.
 
 Outputs
 
-- Input quartets: `quadruplets/Morus_Bato_ArtoA_ArtoB.unique.tsv`
-- Per-quartet FASTAs: `fastas/*.fa` and 4-fold-only FASTAs: `fastas_4fold/*.fa`
+- Input quintet: `quintets/Ficus_Morus_Bato_ArtoA_ArtoB.unique.tsv`
+- Per-quintetFASTAs: `fastas/*.fa` 
 - Clean alignments: `alignments/*.aln.fa`
-- Gene trees: `trees/*.treefile` and concatenated set: `astral/all_gene_trees.tre` + `astral/species_tree.tre`
-- Topology counts: `topology_counts.tsv` and discordance figure: `20260304_WGD_Topology_Discordance.pdf`
-- BEAST inputs/outputs (optional): `FourFoldDegenerate.nex`, `*.xml`, `*.ann`, and `20260225_BEAST_Divergence_Dating_All.pdf`
+- Gene trees: `trees/*.treefile` 
+- Topology counts: `topology_counts.tsv`
 
-Taking the chr specific CDS files from the annotation section, divide into ArtoA / ArtoB/ Bato / Morus cds fastas. 
+Taking the chr specific CDS files from the annotation section, divide into ArtoA / ArtoB/ Bato / Morus / Ficus  cds fastas. 
 
 Compare the Batocarpus / Artocarpus A / Artocarpus B subgenome maps:
 
@@ -5519,6 +6114,7 @@ awk '{print $1}' Chr_Map.txt | xargs -I {} sh -c 'cat chrs/Artocarpus*{}*.fa' > 
 awk '{print $2}' Chr_Map.txt | xargs -I {} sh -c 'cat chrs/Artocarpus*{}*.fa' > ${OD}/ArtoB.fa
 cat chrs/Batocarpus*fa > ${OD}/Bato.fa
 cat chrs/Morus*fa > ${OD}/Morus.fa 
+cat chrs/Ficus*fa > ${OD}/Ficus.fa 
 ```
 
 And then to ensure each CDS is unique, ensure the haps for Artocarpus are indicated in CDS headers: 
@@ -5529,165 +6125,117 @@ sed -i 's/Artocarpus/ArtoB/g' ArtoB.fa
 sed -i 's/Batocarpus/Bato/g' Bato.fa
 ```
 
+Run initial RBH: 
+
 ```bash
 #!/bin/bash
 
-#SBATCH --job-name=RBH4_Morus_anchor
-#SBATCH --time=8-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
 #SBATCH --partition=ceres
 #SBATCH --account=coffea_pangenome
 
-# module load miniconda
-# source activate beast 
 set -euo pipefail
 
 # CONFIG
-WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/duplication_orthology/copies_quartet
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/duplication_orthology/quintet
 cd "${WD}"
 
-# Input CDS FASTAs
-MORUS_FA=${WD}/Morus.fa
-BATO_FA=${WD}/Bato.fa
-ARTOA_FA=${WD}/ArtoA.fa
-ARTOB_FA=${WD}/ArtoB.fa
-
-# Output dirs
-mkdir -p db blast maps rbh quadruplets fastas work
-
-# Threads for BLAST
 THREADS=8
+ANCHOR=Ficus
 
-# 1. MAKE BLAST DATABASES
+declare -A FASTA
+FASTA[Ficus]="${WD}/Ficus.fa"
+FASTA[Morus]="${WD}/Morus.fa"
+FASTA[Bato]="${WD}/Bato.fa"
+FASTA[ArtoA]="${WD}/ArtoA.fa"
+FASTA[ArtoB]="${WD}/ArtoB.fa"
+
+TARGETS=(Morus Bato ArtoA ArtoB)
+
+mkdir -p db blast maps rbh quintets fastas work
+
 echo "[`date`] Making BLAST databases..."
 
-# Anchor (Morus) DB for reciprocal BLAST
-if [ ! -f db/Morus.nhr ]; then
-    makeblastdb -in "${MORUS_FA}" -dbtype nucl -out db/Morus
-fi
+for sp in "${ANCHOR}" "${TARGETS[@]}"; do
+    if [ ! -f "db/${sp}.nhr" ]; then
+        makeblastdb -in "${FASTA[$sp]}" -dbtype nucl -out "db/${sp}"
+    fi
+done
 
-# Target DBs: Bato, ArtoA, ArtoB
-if [ ! -f db/Bato.nhr ]; then
-    makeblastdb -in "${BATO_FA}" -dbtype nucl -out db/Bato
-fi
+echo "[`date`] Running BLAST searches..."
 
-if [ ! -f db/ArtoA.nhr ]; then
-    makeblastdb -in "${ARTOA_FA}" -dbtype nucl -out db/ArtoA
-fi
+for sp in "${TARGETS[@]}"; do
 
-if [ ! -f db/ArtoB.nhr ]; then
-    makeblastdb -in "${ARTOB_FA}" -dbtype nucl -out db/ArtoB
-fi
+    blastn -query "${FASTA[$ANCHOR]}" -db "db/${sp}" \
+        -out "blast/${ANCHOR}_vs_${sp}.tsv" \
+        -outfmt "6 qseqid sseqid pident length evalue bitscore" \
+        -max_target_seqs 5 -evalue 1e-5 -num_threads "${THREADS}"
 
-# 2. BLAST: MORUS -> OTHERS
-echo "[`date`] BLAST: Morus -> Bato / ArtoA / ArtoB..."
+    blastn -query "${FASTA[$sp]}" -db "db/${ANCHOR}" \
+        -out "blast/${sp}_vs_${ANCHOR}.tsv" \
+        -outfmt "6 qseqid sseqid pident length evalue bitscore" \
+        -max_target_seqs 5 -evalue 1e-5 -num_threads "${THREADS}"
 
-blastn -query "${MORUS_FA}" -db db/Bato \
-    -out blast/Morus_vs_Bato.tsv \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" \
-    -max_target_seqs 5 -evalue 1e-5 -num_threads ${THREADS}
+done
 
-blastn -query "${MORUS_FA}" -db db/ArtoA \
-    -out blast/Morus_vs_ArtoA.tsv \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" \
-    -max_target_seqs 5 -evalue 1e-5 -num_threads ${THREADS}
-
-blastn -query "${MORUS_FA}" -db db/ArtoB \
-    -out blast/Morus_vs_ArtoB.tsv \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" \
-    -max_target_seqs 5 -evalue 1e-5 -num_threads ${THREADS}
-
-# 3. BLAST: OTHERS -> MORUS
-echo "[`date`] BLAST: Bato / ArtoA / ArtoB -> Morus..."
-
-blastn -query "${BATO_FA}" -db db/Morus \
-    -out blast/Bato_vs_Morus.tsv \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" \
-    -max_target_seqs 5 -evalue 1e-5 -num_threads ${THREADS}
-
-blastn -query "${ARTOA_FA}" -db db/Morus \
-    -out blast/ArtoA_vs_Morus.tsv \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" \
-    -max_target_seqs 5 -evalue 1e-5 -num_threads ${THREADS}
-
-blastn -query "${ARTOB_FA}" -db db/Morus \
-    -out blast/ArtoB_vs_Morus.tsv \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" \
-    -max_target_seqs 5 -evalue 1e-5 -num_threads ${THREADS}
-
-# 4. GET BEST HITS (PER QUERY)
 echo "[`date`] Selecting best hits per query..."
 
-# Sort by query, then by descending bitscore, keep first per query
 best_hit() {
     in=$1
     out=$2
+
     sort -k1,1 -k6,6nr "${in}" \
-      | awk -F'\t' '!seen[$1]++ {print $1"\t"$2}' > "${out}"
+        | awk -F'\t' '!seen[$1]++ {print $1"\t"$2}' \
+        > "${out}"
 }
 
-best_hit blast/Morus_vs_Bato.tsv   maps/Morus2Bato.best
-best_hit blast/Morus_vs_ArtoA.tsv  maps/Morus2ArtoA.best
-best_hit blast/Morus_vs_ArtoB.tsv  maps/Morus2ArtoB.best
+for sp in "${TARGETS[@]}"; do
+    best_hit "blast/${ANCHOR}_vs_${sp}.tsv" "maps/${ANCHOR}2${sp}.best"
+    best_hit "blast/${sp}_vs_${ANCHOR}.tsv" "maps/${sp}2${ANCHOR}.best"
+done
 
-best_hit blast/Bato_vs_Morus.tsv   maps/Bato2Morus.best
-best_hit blast/ArtoA_vs_Morus.tsv  maps/ArtoA2Morus.best
-best_hit blast/ArtoB_vs_Morus.tsv  maps/ArtoB2Morus.best
+echo "[`date`] Computing pairwise RBHs with ${ANCHOR} anchor..."
 
-# 5. RECIPROCAL BEST HITS (PAIRWISE)
-echo "[`date`] Computing pairwise RBH with Morus anchor..."
-# Morus <-> Bato
-# Morus2Bato: MorusID  BatoID
-# Bato2Morus: BatoID   MorusID
-# We want MorusID  BatoID where both agree
-join -t $'\t' -1 1 -2 2 \
-    <(sort -k1,1 maps/Morus2Bato.best) \
-    <(sort -k2,2 maps/Bato2Morus.best) \
-    | awk -F'\t' '{print $1"\t"$2}' \
-    > rbh/Morus_Bato.rbh
+for sp in "${TARGETS[@]}"; do
 
-# Morus <-> ArtoA
-join -t $'\t' -1 1 -2 2 \
-    <(sort -k1,1 maps/Morus2ArtoA.best) \
-    <(sort -k2,2 maps/ArtoA2Morus.best) \
-    | awk -F'\t' '{print $1"\t"$2}' \
-    > rbh/Morus_ArtoA.rbh
+    join -t $'\t' -1 1 -2 2 \
+        <(sort -k1,1 "maps/${ANCHOR}2${sp}.best") \
+        <(sort -k2,2 "maps/${sp}2${ANCHOR}.best") \
+        | awk -F'\t' '{print $1"\t"$2}' \
+        > "rbh/${ANCHOR}_${sp}.rbh"
 
-# Morus <-> ArtoB
-join -t $'\t' -1 1 -2 2 \
-    <(sort -k1,1 maps/Morus2ArtoB.best) \
-    <(sort -k2,2 maps/ArtoB2Morus.best) \
-    | awk -F'\t' '{print $1"\t"$2}' \
-    > rbh/Morus_ArtoB.rbh
+done
 
-# Each RBH file now has:
-# MorusID   BatoID
-# MorusID   ArtoAID
-# MorusID   ArtoBID
+echo "[`date`] Intersecting RBHs to get 5-way 1:1:1:1:1 sets..."
 
-# 6. INTERSECT TO GET 1:1:1:1 SETS
-echo "[`date`] Intersecting RBHs to get Morus–Bato–ArtoA–ArtoB 1:1:1:1 sets..."
+cp "rbh/${ANCHOR}_${TARGETS[0]}.rbh" "quintets/tmp_${ANCHOR}_${TARGETS[0]}.tsv"
 
-# Join on Morus ID across the three RBH maps
-# Step 1: Morus–Bato with Morus–ArtoA
-join -t $'\t' -1 1 -2 1 \
-    <(sort -k1,1 rbh/Morus_Bato.rbh) \
-    <(sort -k1,1 rbh/Morus_ArtoA.rbh) \
-    > quadruplets/tmp_Morus_Bato_ArtoA.tsv
-# Columns: MorusID  BatoID  ArtoAID
+current="quintets/tmp_${ANCHOR}_${TARGETS[0]}.tsv"
+name="${ANCHOR}_${TARGETS[0]}"
 
-# Step 2: add Morus–ArtoB
-join -t $'\t' -1 1 -2 1 \
-    <(sort -k1,1 quadruplets/tmp_Morus_Bato_ArtoA.tsv) \
-    <(sort -k1,1 rbh/Morus_ArtoB.rbh) \
-    > quadruplets/Morus_Bato_ArtoA_ArtoB.tsv
-# Columns: MorusID  BatoID  ArtoAID  ArtoBID
+for sp in "${TARGETS[@]:1}"; do
 
-rm quadruplets/tmp_Morus_Bato_ArtoA.tsv
+    next="quintets/tmp_${name}_${sp}.tsv"
 
-# Optional: ensure uniqueness (no repeated IDs across rows)
+    join -t $'\t' -1 1 -2 1 \
+        <(sort -k1,1 "${current}") \
+        <(sort -k1,1 "rbh/${ANCHOR}_${sp}.rbh") \
+        > "${next}"
+
+    current="${next}"
+    name="${name}_${sp}"
+
+done
+
+cp "${current}" "quintets/${ANCHOR}_Morus_Bato_ArtoA_ArtoB.tsv"
+
+rm quintets/tmp_*.tsv
+
+echo "[`date`] Enforcing no duplicated IDs within species columns..."
+
 awk '
 {
     keep=1
@@ -5697,76 +6245,77 @@ awk '
         }
     }
     if (keep) print
-}' quadruplets/Morus_Bato_ArtoA_ArtoB.tsv \
-  > quadruplets/Morus_Bato_ArtoA_ArtoB.unique.tsv
+}' "quintets/${ANCHOR}_Morus_Bato_ArtoA_ArtoB.tsv" \
+  > "quintets/${ANCHOR}_Morus_Bato_ArtoA_ArtoB.unique.tsv"
 
-echo "[`date`] 4-way RBH sets:"
-wc -l quadruplets/Morus_Bato_ArtoA_ArtoB.unique.tsv
+echo "[`date`] 5-way RBH sets:"
+wc -l "quintets/${ANCHOR}_Morus_Bato_ArtoA_ArtoB.unique.tsv"
+
 ```
 
-### Extract 4-fold Sites
-
-Extract 4 fold, generate gene trees:
+Extract those genes and then align, extract 4-fold sites.
 
 ```bash
 #!/bin/bash
 
-#SBATCH --job-name=WGD_Quartets_dS_Trees
-#SBATCH --time=8-00:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=16G
+#SBATCH --cpus-per-task=24
+#SBATCH --mem=48G
 #SBATCH --partition=ceres
 #SBATCH --account=coffea_pangenome
 
 # module load miniconda
 # source activate beast
+module load parallel
 
-JOBS=14
-WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/duplication_orthology/copies_quartet
+JOBS=22
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/duplication_orthology/quintet
 
 # Input CDS
+FICUS_FA=${WD}/Ficus.fa
 MORUS_FA=${WD}/Morus.fa
 BATO_FA=${WD}/Bato.fa
 ARTOA_FA=${WD}/ArtoA.fa
 ARTOB_FA=${WD}/ArtoB.fa
 
-QUADS_TSV="${WD}/quadruplets/Morus_Bato_ArtoA_ArtoB.unique.tsv"   # 4 cols: MorusID BatoID ArtoAID ArtoBID
+QUIN_TSV="${WD}/quintets/Ficus_Morus_Bato_ArtoA_ArtoB.unique.tsv"   # 5 cols: FicusID MorusID BatoID ArtoAID ArtoBID
 
 # Working/output dirs
-IN_DIR="${WD}/fastas"             # unaligned 4-way RBH fastas (produced in step A)
-OUT_DIR="${WD}/fastas_4fold"      # extracted 4-fold sites (your existing output)
-WORK_DIR="${WD}/work_quartet"     # per-gene work
-ALIGN_DIR="${WD}/alignments"      # aligned_NT.clean.fasta copied here as *.aln.fa
+RAW_DIR="${WD}/fastas"             # unaligned 5-way RBH fastas
+OUT_DIR="${WD}/fastas_4fold"      # extracted 4-fold sites
+OUT_DIR_STRICT="${WD}/fastas_4fold_strict"      # extracted 4-fold sites, les than 30% gaps 
+WORK_DIR="${WD}/work_quintet"     # per-gene work
+ALIGN_DIR="${WD}/alignments"      # aln_NT.clipkit.strict.fa copies here 
 TREE_WORK="${WD}/tree_work"       # IQ-TREE temp prefix outputs
 TREE_DIR="${WD}/trees"            # cleaned final gene trees (*.treefile)
 ASTRAL_DIR="${WD}/astral"         # species tree outputs
-TREE_NEWICK="(((Bato,ArtoA),ArtoB),Morus);"  # Morus as outgroup
 
-mkdir -p "${IN_DIR}" "${OUT_DIR}" "${WORK_DIR}" "${ALIGN_DIR}" "${TREE_WORK}" "${TREE_DIR}" "${ASTRAL_DIR}"
+mkdir -p "${RAW_DIR}" "${OUT_DIR}" "${OUT_DIR_STRICT}" "${WORK_DIR}" "${ALIGN_DIR}" "${TREE_WORK}" "${TREE_DIR}" "${ASTRAL_DIR}"
 cd "${WD}"
 
 # Tool checks
-for tool in macse degenotate.py seqkit bioawk parallel samtools iqtree java; do
+for tool in macse clipkit seqkit bioawk parallel samtools iqtree java; do
   command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool not found in PATH"; exit 1; }
 done
 
-# (A) Build 4-way RBH FASTAs 
-echo "[$(date)] Indexing input genomes (if needed)"
-for fa in "${MORUS_FA}" "${BATO_FA}" "${ARTOA_FA}" "${ARTOB_FA}"; do
+# (A) Build 5-way RBH FASTAs 
+echo "[$(date)] Indexing input genomes"
+for fa in "${FICUS_FA}" "${MORUS_FA}" "${BATO_FA}" "${ARTOA_FA}" "${ARTOB_FA}"; do
   [ -f "${fa}.fai" ] || samtools faidx "${fa}"
 done
 
 # --- Parallel writing ---
-echo "[$(date)] Writing 4-way RBH FASTAs to: ${IN_DIR}"
+echo "[$(date)] Writing 5-way RBH FASTAs to: ${RAW_DIR}"
 
-write_quad() {
-  local morus_id="$1" bato_id="$2" artoa_id="$3" artob_id="$4"
-  local outfa="${IN_DIR}/${morus_id}__${bato_id}__${artoa_id}__${artob_id}.fa"
+write_quin() {
+  local ficus_id="$1" morus_id="$2" bato_id="$3" artoa_id="$4" artob_id="$5"
+  local outfa="${RAW_DIR}/${ficus_id}.fa"
   echo "  -> ${outfa}"
 
   {
     # Prefix headers with species so yields Bato/ArtoA/ArtoB/Morus
+    samtools faidx "${FICUS_FA}" "${ficus_id}" | sed "1s/^>.*/>Ficus/"
     samtools faidx "${MORUS_FA}" "${morus_id}" | sed "1s/^>.*/>Morus/"
     samtools faidx "${BATO_FA}"  "${bato_id}"  | sed "1s/^>.*/>Bato/"
     samtools faidx "${ARTOA_FA}" "${artoa_id}" | sed "1s/^>.*/>ArtoA/"
@@ -5774,12 +6323,12 @@ write_quad() {
   } > "${outfa}"
 }
 
-export -f write_quad
-export IN_DIR MORUS_FA BATO_FA ARTOA_FA ARTOB_FA
+export -f write_quin
+export RAW_DIR FICUS_FA MORUS_FA BATO_FA ARTOA_FA ARTOB_FA WD OUT_DIR OUT_DIR_STRICT
 
-# Read 4 columns: MorusID BatoID ArtoAID ArtoBID
+# Read 5 columns: MorusID BatoID ArtoAID ArtoBID
 parallel --colsep '\t' --jobs "${JOBS}" --no-notice \
-  write_quad {1} {2} {3} {4} :::: "${QUADS_TSV}"
+  write_quin {1} {2} {3} {4} {5} :::: "${QUIN_TSV}"
 
 # Process one fasta
 process_fa() {
@@ -5791,9 +6340,9 @@ process_fa() {
   mkdir -p "${wdir}"
   cd "${wdir}"
 
-  # Validate we have the four species (names Bato/ArtoA/ArtoB/Morus after stripping suffix)
+  # Validate we have the five species (names Bato/ArtoA/ArtoB/Morus/Ficus after stripping suffix)
   sed 's/_.*//g' "$fa" > raw.fa
-  local required=(Bato ArtoA ArtoB Morus)
+  local required=(Bato ArtoA ArtoB Morus Ficus)
   for sp in "${required[@]}"; do
     if ! grep -q "^>${sp}\b" raw.fa; then
       echo "Skipping ${base}: missing sequence for ${sp}" >&2
@@ -5801,14 +6350,10 @@ process_fa() {
     fi
   done
 
-  # Quartet tree
-  printf '%s\n' "${TREE_NEWICK}" > tree.nwk
-
   # 1) Codon align with MACSE
   macse -prog alignSequences \
     -seq  raw.fa \
-    -out_NT aligned_NT.fasta \
-    -out_AA aligned_AA.fasta > macse.log 2>&1
+    -out_NT aligned_NT.fasta > macse.log 2>&1
 
   # 2) Clean alignment (remove FS/Stop marks)
   macse -prog exportAlignment \
@@ -5818,68 +6363,50 @@ process_fa() {
     -codonForInternalFS --- \
     -codonForInternalStop --- \
     -charForRemainingFS - \
-    -out_NT aligned_NT.clean.fasta \
-    -out_AA aligned_AA.clean.fasta
+    -out_NT aligned_NT.clean.fasta
 
-  # Confirm we still have the four samples post-clean
+  # Confirm we still have the five samples post-clean
   local nsamp
   nsamp="$(grep -c '^>' aligned_NT.clean.fasta || true)"
-  if [[ "$nsamp" -ne 4 ]]; then
-    echo "Skipping ${base}: cleaned alignment has ${nsamp} sequences (expected 4)" >&2
+  if [[ "$nsamp" -ne 5 ]]; then
+    echo "Skipping ${base}: cleaned alignment has ${nsamp} sequences (expected 5)" >&2
     return 0
   fi
 
-  # 3) Degeneracy annotation: extract 4-fold sites
-  degenotate.py --overwrite -s aligned_NT.clean.fasta -x 4 -o 4fold > degen.log 2>&1
+  # 3) Trim gappy codon positions
+  clipkit aligned_NT.clean.fasta -o aln_NT.clipkit.fa --codon -m kpic > clipkit.log 2>&1
 
-  # 4) Intersect positions that are 4-fold in ALL FOUR sequences.
-  awk '$5 == 4' 4fold/degeneracy-all-sites.bed \
-    | cut -f3 \
-    | sort -n \
-    | uniq -c \
-    | awk '$1 == 4 {print $2}' > positions_1based.txt
-
-  # If no positions, emit empty sequences with headers
-  if [[ ! -s positions_1based.txt ]]; then
-    {
-      echo ">Bato";  echo
-      echo ">ArtoA"; echo
-      echo ">ArtoB"; echo
-      echo ">Morus"; echo
-    } > 4fold_extracted.fasta
-  else
-    # 5) Extract those positions from the clean alignment
-    pos="$(paste -sd, positions_1based.txt)"
-    bioawk -c fastx -v pos="$pos" '
-      BEGIN { n = split(pos, P, ",") }
+  # 4) Create a "strict" codon alignment that drops sequences with >30% gaps
+  seqkit fx2tab aln_NT.clipkit.fa \
+  | awk -F'\t' '
       {
-        out = ""
-        for (i = 1; i <= n; i++) {
-          out = out substr($seq, P[i], 1)
-        }
-        print ">" $name "\n" out
-      }' aligned_NT.clean.fasta > 4fold_extracted.fasta
-  fi
-
-  # 6) Ensure order: Bato, ArtoA, ArtoB, Morus
-  seqkit grep -r -p Bato  4fold_extracted.fasta \
-    | cat - <(seqkit grep -r -p ArtoA 4fold_extracted.fasta) \
-            <(seqkit grep -r -p ArtoB 4fold_extracted.fasta) \
-            <(seqkit grep -r -p Morus 4fold_extracted.fasta) \
-    > ordered.fa
-
-  # 7) Final outputs
-  cp ordered.fa "${OUT_DIR}/${base}.fa"
-
-  # (B-pre) Copy the cleaned full alignment (not 4-fold) for tree building later
-  cp aligned_NT.clean.fasta "${ALIGN_DIR}/${base}.aln.fa"
+        total = length($2)
+        seq = $2
+        gaps = gsub(/-/, "", seq)
+        if (total > 0 && gaps / total <= 0.30)
+          print $1
+      }
+    ' \
+  | seqkit grep -f - aln_NT.clipkit.fa > aln_NT.clipkit.strict.fa
+  
+  # Require 5 samples with ATG aligned and extract 
+  python /home/justin.merondun/merothon/merothon/scripts/Extract_4Fold.py -i aln_NT.clipkit.fa -m 5 -o extract
+  cp extract.4fold.fa "${OUT_DIR}/${base}.fa"
+  
+  # and strict...
+  python /home/justin.merondun/merothon/merothon/scripts/Extract_4Fold.py -i aln_NT.clipkit.strict.fa -m 5 -o extract_strict \
+    || echo "WARN: strict extract failed for ${base}"
+  [ -f extract_strict.4fold.fa ] && cp extract_strict.4fold.fa "${OUT_DIR_STRICT}/${base}.fa"
+  [ -f extract_strict.4fold.fa ] && cp aln_NT.clipkit.strict.fa "${ALIGN_DIR}/${base}.aln.fa"
+  rm -f *log raw_AA.fa raw.fa aligned_NT.fasta aligned_NT_AA.fasta
+ 
 }
 
 export -f process_fa
-export WD IN_DIR OUT_DIR WORK_DIR ALIGN_DIR TREE_NEWICK
+export WD RAW_DIR OUT_DIR OUT_DIR_STRICT WORK_DIR ALIGN_DIR
 
 # Parallel
-find "${IN_DIR}" -type f -name '*.fa' -print0 \
+find "${RAW_DIR}" -type f -name '*.fa' -print0 \
   | parallel -0 \
       --jobs "${JOBS}" \
       --no-notice \
@@ -5905,7 +6432,7 @@ build_tree() {
   iqtree -s "$aln" \
          -m MFP \
          -bb 1000 \
-         -nt AUTO \
+         -nt 1 \
          -pre "${TREE_WORK}/${base}"
 
   if [[ ! -f "${TREE_WORK}/${base}.treefile" ]]; then
@@ -5918,71 +6445,59 @@ export TREE_DIR TREE_WORK
 # Run on all alignments; keep order of outputs
 find "${ALIGN_DIR}" -type f -name '*.aln.fa' -print0 \
   | parallel -0 --jobs "${JOBS}" --no-notice --keep-order build_tree {}
-
-# CONCATENATE ALL GENE TREES FOR ASTRAL
-echo "[`date`] Concatenating gene trees..."
-cat "${TREE_DIR}"/*.treefile > "${ASTRAL_DIR}/all_gene_trees.tre"
-
-# RUN ASTRAL TO INFER SPECIES TREE
-echo "[`date`] Running ASTRAL..."
-java -jar ~/symlinks/software/ASTRAL-5.7.1/astral.5.7.1.jar \
-    -i "${ASTRAL_DIR}/all_gene_trees.tre" \
-    -o "${ASTRAL_DIR}/species_tree.tre" \
-    -t 2 \
-    2> "${ASTRAL_DIR}/astral.log"
-
-echo "[`date`] ASTRAL species tree written to: ${ASTRAL_DIR}/species_tree.tre"
 ```
-
-### Count Topos: Gene/Species Tree Discord
 
 Count topologies:
 
-````python
-#!/usr/bin/env python3
-
+```python
+ 
 import argparse
 import glob
 from collections import Counter
 from ete3 import Tree
-
+ 
+ 
+def canonical_subtree(node):
+    """Return a sorted topology string for any rooted subtree."""
+    if node.is_leaf():
+        return node.name
+ 
+    children = [canonical_subtree(ch) for ch in node.children]
+    children = sorted(children)
+    return "(" + ",".join(children) + ")"
+ 
+ 
 def classify(tree, outgroup):
-    # Root the tree on the user-specified outgroup
     tree.set_outgroup(outgroup)
-
-    # Get all leaf names
+ 
     leaves = sorted(tree.get_leaf_names())
-
-    # The ingroup taxa are the three not equal to the outgroup
+ 
+    if outgroup not in leaves:
+        raise ValueError(f"Outgroup {outgroup} not found in tree: {leaves}")
+ 
     ingroup = [t for t in leaves if t != outgroup]
-
-    if len(ingroup) != 3:
-        raise ValueError(f"Tree does not contain exactly 3 ingroup taxa: {leaves}")
-
-    a, b, c = ingroup
-
-    # Compute pairwise patristic distances
-    d = tree.get_distance
-    pairs = {
-        (a, b): d(a, b),
-        (a, c): d(a, c),
-        (b, c): d(b, c)
-    }
-
-    # The smallest distance pair defines the topology
-    closest = min(pairs, key=pairs.get)
-
-    # Build a canonical topology string
-    # Example: Outgroup,(A,(B,C))
-    x, y = closest
-    z = [t for t in ingroup if t not in closest][0]
-
-    # The topology is: outgroup sister to a clade where the closest pair is nested deepest
-    return f"{outgroup},({z},({x},{y}))"
-
+ 
+    if len(ingroup) != 4:
+        raise ValueError(f"Tree does not contain exactly 4 ingroup taxa: {leaves}")
+ 
+    # After rooting on outgroup, the non-outgroup child of the root is the ingroup topology
+    root_children = tree.children
+    ingroup_nodes = [
+        ch for ch in root_children
+        if outgroup not in ch.get_leaf_names()
+    ]
+ 
+    if len(ingroup_nodes) != 1:
+        raise ValueError(f"Could not identify single ingroup clade after rooting: {leaves}")
+ 
+    ingroup_topo = canonical_subtree(ingroup_nodes[0])
+ 
+    return f"{outgroup},{ingroup_topo}"
+ 
+ 
 def main():
     parser = argparse.ArgumentParser(
-        description="Classify rooted 4‑taxon gene trees into one of three topologies and output counts."
+        description="Classify rooted 5-taxon gene trees and output topology counts."
     )
     parser.add_argument(
         "-i", "--input",
@@ -5992,22 +6507,27 @@ def main():
     parser.add_argument(
         "-o", "--outgroup",
         required=True,
-        help="Name of the outgroup taxon (must appear in every tree)"
+        help="Name of the outgroup taxon, e.g. Ficus"
     )
+    parser.add_argument(
+        "--output",
+        default="topology_counts.tsv",
+        help="Output TSV path"
+    )
+ 
     args = parser.parse_args()
-
-    pattern = f"{args.input.rstrip('/')}" + "/*.treefile"
+ 
+    pattern = f"{args.input.rstrip('/')}/*.treefile"
     files = glob.glob(pattern)
-
+ 
     if not files:
         print(f"No .treefile files found in {args.input}")
-        # Still write an empty TSV with header for consistency
-        with open("topology_counts.tsv", "w") as outfh:
+        with open(args.output, "w") as outfh:
             outfh.write("topology\tcount\n")
         return
-
+ 
     counts = Counter()
-
+ 
     for f in files:
         try:
             t = Tree(f)
@@ -6015,78 +6535,57 @@ def main():
             counts[topo] += 1
         except Exception as e:
             print(f"Warning: failed to parse {f}: {e}")
-
-    # Screen printing
+ 
     print("\nTopology counts:")
     for topo in sorted(counts.keys()):
         print(f"{topo}: {counts[topo]}")
-
+ 
     total = sum(counts.values())
     print(f"\nTotal trees processed: {total}")
-
-    # Write TSV in CWD
-    out_path = "topology_counts.tsv"
-    with open(out_path, "w") as outfh:
+ 
+    with open(args.output, "w") as outfh:
         outfh.write("topology\tcount\n")
         for topo in sorted(counts.keys()):
             outfh.write(f"{topo}\t{counts[topo]}\n")
-
-    print(f"\nWrote TSV: {out_path}")
-
+ 
+    print(f"\nWrote TSV: {args.output}")
+ 
+ 
 if __name__ == "__main__":
     main()
-````
-
-```
-python 03_TopologyCounting.py -i trees/ -o Morus
-Topology counts:
-Morus,(ArtoB,(ArtoA,Bato)): 7750
-Morus,(ArtoA,(ArtoB,Bato)): 788
-Morus,(Bato,(ArtoA,ArtoB)): 201
-
-Total trees processed: 8739
 ```
 
-### Plot Discordance 
-
-Plot:
+### Plot Discordance
 
 ```R
-# install.packages(c("ggplot2", "tibble", "scales", "patchwork", "ape"))  # CRAN
-# BiocManager::install("ggtree")  # from Bioconductor
-library(ggplot2)
-library(tibble)
+setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/duplication_orthology/quintet')
+library(tidyverse)
 library(scales)
 library(patchwork)
 library(ape)
 library(ggtree)
 
-# Data
-df <- tribble(
-  ~Topology, ~Count,
-  "Morus,(ArtoB,(ArtoA,Bato))", 7750,
-  "Morus,(ArtoA,(ArtoB,Bato))", 788,
-  "Morus,(Bato,(ArtoA,ArtoB))", 201
-)
+top_n <- 4
 
-df$Topology <- factor(
-  df$Topology,
-  levels = c(
-    "Morus,(ArtoB,(ArtoA,Bato))",
-    "Morus,(ArtoA,(ArtoB,Bato))",
-    "Morus,(Bato,(ArtoA,ArtoB))"
+df <- read_tsv(
+  "topology_counts.tsv",
+  col_names = c("Topology", "Count"),
+  show_col_types = FALSE
+) %>%
+  filter(Topology != "topology") %>%
+  mutate(Count = as.integer(Count)) %>%
+  arrange(desc(Count)) %>%
+  slice_head(n = top_n) %>%
+  mutate(
+    Topology = factor(Topology, levels = Topology),
+    Label = paste0("Topology ", row_number())
   )
-)
 
-palette <- c("#1f77b4", "#ff7f0e", "#2ca02c")
+palette <- scales::hue_pal()(top_n)
 
-# Newick trees
-t1 <- read.tree(text = "(Morus,(ArtoB,(ArtoA,Bato)));")
-t2 <- read.tree(text = "(Morus,(ArtoA,(ArtoB,Bato)));")
-t3 <- read.tree(text = "(Morus,(Bato,(ArtoA,ArtoB)));")
-
-# helper compact tree plot 
-make_tree_plot <- function(tr, color, title = NULL) {
+make_tree_plot <- function(newick, color, title = NULL) {
+  tr <- read.tree(text = paste0("(", newick, ");"))
+  gt <- ggtree(tr, size = 0.5, color = color) 
   ggtree(tr, size = 0.5, color = color) +
     geom_tiplab(size = 3) +
     labs(title = title) +
@@ -6094,20 +6593,26 @@ make_tree_plot <- function(tr, color, title = NULL) {
     theme(
       plot.title = element_text(hjust = 0.5, size = 11, face = "bold"),
       plot.margin = margin(4, 4, 4, 4)
-    )+
-    xlim_tree(0.5)
+    ) +
+    xlim(0,max(gt@data$x)*.25+max(gt@data$x))
 }
 
-p_t1 <- make_tree_plot(t1, palette[1], "Topology 1")
-p_t2 <- make_tree_plot(t2, palette[2], "Topology 2")
-p_t3 <- make_tree_plot(t3, palette[3], "Topology 3")
+tree_plots <- pmap(
+  list(df$Topology, palette, df$Label),
+  make_tree_plot
+)
 
-# Bar chart that matches colors
-p_bar <- ggplot(df, aes(x = Topology, y = Count, fill = Topology)) +
+p_trees <- wrap_plots(tree_plots, nrow = 1)
+
+p_bar <- ggplot(df, aes(x = Label, y = Count, fill = Label)) +
   geom_col(width = 0.7, color = "grey20") +
-  geom_text(aes(label = comma(Count)),
-            vjust = -0.35, size = 4.5, fontface = "bold") +
-  scale_fill_manual(values = palette) +
+  geom_text(
+    aes(label = comma(Count)),
+    vjust = -0.35,
+    size = 4.5,
+    fontface = "bold"
+  ) +
+  scale_fill_manual(values = setNames(palette, df$Label)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.10))) +
   labs(x = NULL, y = "Count") +
   theme_minimal(base_size = 13) +
@@ -6117,133 +6622,17 @@ p_bar <- ggplot(df, aes(x = Topology, y = Count, fill = Topology)) +
     plot.margin = margin(8, 8, 12, 8)
   )
 
-# Stack trees above the bar chart
-final_plot <- (p_t1 + p_t2 + p_t3) / p_bar +
+final_plot <- p_trees / p_bar +
   plot_layout(heights = c(0.38, 0.62))
 
 final_plot
-ggsave('~/symlinks/comp/figures/20260304_WGD_Topology_Discordance.pdf')
+
+ggsave(
+  "~/symlinks/comp/figures/20260515_WGD_Topology_Discordance_top4.pdf",
+  final_plot,
+  width = 6,
+  height = 4
+)
 
 ```
 
-### Quartet BEAST
-
-Merge the 4-fold degenerate fasta files and then import them into beauti:
-
-* Gamma model, 4 categories, estimated shape, GTR with estimated frequencies
-* Strict clock, log normal default prior
-* Yule model, tMRCA prior based on [Williams et al 2017 Out of Borneo](https://academic.oup.com/aob/article/119/4/611/2884288) paper: Morus vs Artocarpus/Batocarpus split: 83.8 74.85-92.65 Ma 
-* They place stem of Artocarpus at 40.07 29.8-50.81, with likely split of Batocarpus/Artocarpus around 59.67 55.24-65.03 Ma - although this is based on genetic evidence alone. 
-* 50M chains, log every 5k 
-
-Convert the fasta to nex:
-
-```bash
-seqkit concat fastas_4fold/*fa > FourFoldDegenerate.fa 2> log
-seqret -sequence FourFoldDegenerate.fa -outseq FourFoldDegenerate.nex -osformat nexus
-```
-
-Run beast:
-
-```bash
-#!/bin/bash
-#SBATCH --time=10-00:00:00
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=20
-#SBATCH --mem=6G
-#SBATCH --partition=ceres
-#SBATCH --account=coffea_pangenome
-
-RUN=$1
-MAX=20
-
-for i in $(seq 1 $MAX); do
-  SEED=$RANDOM
-  echo "Try $i with seed $SEED"
-
-  rm -f ${RUN}.log ${RUN}.trees ${RUN}.state
-
-  beast -threads 20 -overwrite -beagle_SSE -seed $SEED ${RUN}.xml
-
-  if [ $? -eq 0 ]; then
-    treeannotator -b 10 -heights mean ${RUN}.trees ${RUN}.ann
-    echo "Success"
-    exit 0
-  fi
-done
-
-echo "Failed after $MAX attempts"
-exit 1
-```
-
-Plot:
-
-```R
-#### Plot BEAST annotated trees 
-setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/duplication_orthology/copies_quartet/beast')
-library(ggtree)
-library(phytools)
-library(ape)
-library(treeio)
-library(viridis)
-library(ggpubr)
-library(RColorBrewer)
-library(tidyverse)
-
-#Read in metadata
-md = read_tsv('~/artocarpus_comparative_genomics/samples.txt')
-md <- data.frame(Accession = c('ArtoA','ArtoB','Bato','Morus'),
-                 Species = c('Artocarpus','Artocarpus','Batocarpus','Morus'),
-                 Haplotype = c('A','B','Batocarpus','Morus'),
-                 col = c('#fc8d62','#83cab3','#8ea1cc','#e78ac3'))
-
-files = list.files('.',paste0('.*ann'))
-
-counter = 0
-for (file in files){
-  counter = counter +  1 
-  iqtree = read.beast(file) 
-  gg = ggtree(iqtree,layout='rectangular') %<+% md
-  
-  #add label for 95% CIs
-  lab = gsub('.trees.*','',file)
-  heights = gg$data$height_0.95_HPD
-  df = as.data.frame(do.call(rbind, heights)) #convert the list to a data frame
-  df$node_value = 1:nrow(df) # Add node values as a new column
-  colnames(df) = c("value1", "value2", "node")
-  df = df[, c("node", "value1", "value2")]
-  df = df %>% 
-    mutate(
-      value1 = if (grepl("mu", file)) value1 / 1e6 else value1,
-      value2 = if (grepl("mu", file)) value2 / 1e6 else value2,
-      lab = paste0(round(value1,1),' - ',round(value2,1))) %>% 
-    select(!c(value1,value2))
-  
-  leg = md %>% select(Species,Haplotype) %>% unique
-  gg$data = left_join(gg$data,df)
-  ggp = gg  +
-    geom_range(range='height_0.95_HPD', color='red', alpha=.6, size=2) +
-    geom_tippoint(aes(fill = Haplotype,shape=Species),size=3)+
-    geom_nodelab(aes(label=lab),size=2,vjust=1) +
-    ggtitle(lab)+
-    #geom_tiplab(size=2)+
-    #geom_nodelab(aes(x=branch, label=round(posterior, 2)), vjust=-.5, size=3) +
-    scale_fill_manual(values=md$col,breaks=md$Haplotype)+
-    scale_shape_manual(values=c(21,22,24))+
-    theme(legend.position=c(.1, .8))+
-    geom_treescale(x = 5)+
-    guides(fill=guide_legend(override.aes=list(shape=21)))+
-    theme(legend.position='right')
-  ggp
-  assign(paste0('p',counter),ggp)
-} 
-
-ggarrange(p6,p2,p5,p3,p4,p1,common.legend = TRUE)
-
-pdf('~/symlinks/comp/figures/20260225_BEAST_Divergence_Dating_All.pdf',height=6,width=7.5)
-ggarrange(p6,p2,p5,p3,p4,p1,common.legend = TRUE)
-dev.off()
-
-```
-
-​	
