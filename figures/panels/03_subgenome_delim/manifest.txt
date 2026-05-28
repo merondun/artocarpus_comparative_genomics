@@ -1,0 +1,2 @@
+"C:\Users\justin.merondun\OneDrive - USDA\DATA\Research\Breadfruit\comparative_paper\wgd\busco_synteny\202603_busco"
+"C:\Users\justin.merondun\OneDrive - USDA\DATA\Research\Breadfruit\comparative_paper\wgd\orthofinder_haplotypes\2603_MorusFicus"

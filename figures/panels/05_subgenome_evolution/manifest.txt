@@ -1,0 +1,3 @@
+"C:\Users\justin.merondun\OneDrive - USDA\DATA\Research\Breadfruit\comparative_paper\wgd\orthofinder_haplotypes\2603_MorusFicus\20260318_Cafe_Tree_Subgenomes.pdf"
+"C:\Users\justin.merondun\OneDrive - USDA\DATA\Research\Breadfruit\comparative_paper\wgd\transcript_level_dnds\2604_dnds_rbh_alltrees"
+"C:\Users\justin.merondun\OneDrive - USDA\DATA\Research\Breadfruit\comparative_paper\expression\2604_subgenome_bias"
