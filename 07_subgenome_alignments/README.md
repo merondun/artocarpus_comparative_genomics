@@ -4,7 +4,7 @@ Compare variation between Batocarpus and Artocarpus by delineating Artocarpus su
 
 This section will give:
 
-![busco](/figures/20260528_panel_BUSCO_Synteny.png)
+![busco](/figures/panels/03_subgenome_delim/20260520_panel_AGORA_BUSCO.png)
 
 ___
 

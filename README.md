@@ -13,11 +13,12 @@ Core sample metadata live in `samples.txt` (with ordering/plot aesthetics) and `
 - [**05_orthofinder/**](05_orthofinder/) — orthogroup inference and species tree building.
 - [**06_ancestral_reconstruction/**](06_ancestral_reconstruction/) — ancestral chromosome/karyotype reconstructions and lineage fusion/fission summaries.
 - [**07_subgenome_alignments/**](07_subgenome_alignments/) — subgenome partitioning and BUSCO-level synteny comparisons (e.g., chromsyn inputs/plots).
-- [**08_subgenome_orthofinder_cafe5/**](08_subgenome_orthofinder_cafe5/) — subgenome-aware orthology and gene family evolution (CAFE5-ready inputs).
+- [**08_subgenome_orthofinder/**](08_subgenome_orthofinder/) — subgenome-aware orthology. 
 - [**09_subgenome_dnds/**](09_subgenome_dnds/) — subgenome-divided dN/dS along the tree (HyPhy/MG94), candidate scans, and plotting.
-- [**10_subgenome_expression/**](10_subgenome_expression/) — Salmon quantification + RBH mapping to compare A vs B expression bias across selection categories.
+- [**10_subgenome_beast/**](10_subgenome_beast/) — BEAST trees with subgenome-divided RBH hits to Ficus, including Morus + Batocarpus. 
 - [**11_ksrates/**](11_ksrates/) kSRates (manual mode) for rate-adjusted Ks distributions and WGD timing context.
-- [**12_quartet_subgenome_gene_discordance_BEAST/**](12_quartet_subgenome_gene_discordance_BEAST/) — Morus–Bato–ArtoA–ArtoB quartets: RBH sets, 4-fold sites, gene trees/ASTRAL, topology discordance, and BEAST divergence dating.
+- [**12_subgenome_quintet_discordance/**](12_subgenome_quintet_discordance/) — Ficus–Morus–Bato–ArtoA–ArtoB quartets: RBH sets, gene trees, topology discordance.
+- [**13_subgenome_expression/**](13_subgenome_expression/) — Salmon quantification + RBH mapping to compare A vs B expression bias across selection categories.
 
 ## Qs & Cs
 
