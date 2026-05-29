@@ -28,6 +28,44 @@ Questions or comments reach out to Justin Merondun heritabilities [@] gmail.com 
 
 This section captures QC/QA metrics used to validate inputs and track assembly readiness across all accessions. We summarize HiFi read length distributions, estimate genome-wide heterozygosity from GenomeScope2 outputs, and apply read deduplication when warranted. 
 
+Summarize accession SAMN and runs: 
+
+```R
+setwd('C:/Users/herit/My Drive/Research/USDA/arto_comp/')
+library(tidyverse)
+library(readxl)
+
+
+dat <- read_xlsx("Tables.xlsx", sheet = "SRA Data")
+
+out <- dat %>%
+  mutate(
+    Accession = str_replace(Accession, "__.*", "")
+  ) %>%
+  distinct(Accession, `Data Type`, Biosample, RunAccession) %>%
+  group_by(Accession, `Data Type`, Biosample) %>%
+  summarise(
+    runs = paste(sort(unique(RunAccession)), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  mutate(value = paste0(Biosample, " (", runs, ")")) %>%
+  group_by(Accession, `Data Type`) %>%
+  summarise(
+    value = paste(value, collapse = "; "),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = `Data Type`,
+    values_from = value
+  ) %>%
+  arrange(Accession)
+
+out
+write.table(out,file='SRA_Compact.txt',quote=F,sep='\t',row.names=F)
+```
+
+
+
 Read lengths:
 
 ```bash
