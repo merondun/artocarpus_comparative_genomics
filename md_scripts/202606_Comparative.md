@@ -4009,7 +4009,7 @@ Primary outputs:
 
 Panels a-c showing variation in selection across subgenomes:
 
-![subgenome](/figures/20260420_SubgenomeEvolution.png)
+![subgenome](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 
 ____
 
@@ -5095,7 +5095,7 @@ Outputs:
 
 Panel a from:
 
-![beast](/20260528_GeneTrees_BEAST_kS.png)
+![beast](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 
 Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
 
@@ -5956,6 +5956,12 @@ ggsave('~/artocarpus_comparative_genomics/figures/20260420_Expression_Bias_Subge
 
 This prepares cleaned CDS FASTAs and the ARtocarpus GFF3, then runs kSRates (in manual mode) to estimate paralog and ortholog Ks distributions across Artocarpus–Batocarpus–Morus and perform rate adjustment before generating plots. 
 
+This corresponds to panel c:
+
+![ksrates](/figures/panels/04_subgenome_history/20260528_GeneTrees_BEAST_kS.png)
+
+___
+
 Outputs
 
 - Ortholog peak / Ks list databases: `ortholog_peak_db.tsv`, `ortholog_ks_list_db.tsv`
@@ -6140,6 +6146,8 @@ cp ./rate_adjustment/arto/orthologs_arto_bato.pdf . # rate-adjusted ortholog dis
 cp ./rate_adjustment/arto/tree_arto_distances.pdf . # kS scaled branch length tree 
 ```
 
+
+
 ## Quintets: Gene Discordance
 
 This builds 5-taxon ortholog quintets (Ficus–Morus–Batocarpus–ArtocarpusA–ArtocarpusB) via reciprocal best-hit BLAST, aligns each quintet, and infers gene trees (IQ-TREE), and summarizes gene-tree/species-tree discordance by topology counting.
@@ -6148,7 +6156,7 @@ Primary output:
 
 Panel b from:
 
-![discordance](20260528_GeneTrees_BEAST_kS.png)
+![ksrates](/figures/panels/04_subgenome_history/20260528_GeneTrees_BEAST_kS.png)
 
 
 

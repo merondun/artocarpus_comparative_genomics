@@ -2,19 +2,23 @@
 
 This workflow splits CDS FASTAs into subgenome (A/B) partitions using chromosome haplotype lists, then identifies orthologous CDS sets via reciprocal best‑hit BLAST using *Morus* as the anchor reference. Per-gene multi-sample CDS alignments are built, filtered, and pruned to matching taxa, and HyPhy (MG94) is run on each gene to estimate branch-specific dN/dS across the tree.
 
-This corresponds to panels B & C & D:
+Primary outputs:
 
-![subgenome_evo](/figures/20260407_SubgenomeEvolution.png)
+Panels a-c showing variation in selection across subgenomes:
 
-___
+![subgenome](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 
-Primary outputs
+____
+
+Working files:
 
 - Subgenome CDS FASTAs: `*A.fa`, `*B.fa` (plus outgroup FASTAs in `cds_files/`).
 - RBH ortholog pairs: `blast/RBH_Morus_<SAMPLE>.txt` and per-gene sequence folders: `genes/<Morus_gene>/*.fa`.
 - Per-gene multi-FASTA alignments: `raw/<gene>.fa`.
 - HyPhy per-gene results: `hyphy_out/<gene>.tsv` and `hyphy_out/<gene>.tree.nwk` (+ `*.skip.txt` for filtered genes).
 - Compiled table: `Node_dNdS_20260406.tsv`.
+
+Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
 
 ```bash
 # Config
@@ -459,6 +463,7 @@ library(ape)
 library(ggtree)
 library(ggpubr)
 library(viridis)
+library(meRo)
 
 # read in dnds
 dnds <- read_tsv('Node_dNdS_20260406.tsv')
@@ -504,10 +509,10 @@ wstats <- left_join(dnds,gene_subset_tips) %>%
       ),
     # Subg: A if ends in A or 1; B if ends in B or 2; else NA
     Subg = case_when(
-        str_detect(Branch, "A$|1$") ~ "A",
-        str_detect(Branch, "B$|2$") ~ "B",
-        TRUE ~ NA_character_
-      ),
+      str_detect(Branch, "A$|1$") ~ "A",
+      str_detect(Branch, "B$|2$") ~ "B",
+      TRUE ~ NA_character_
+    ),
     Localization = ifelse(
       Subset == "22",
       paste0('Shared_',Subg),
@@ -528,10 +533,17 @@ wstats_clean <- wstats %>%
   mutate(omega = pmin(MLE, omega_cap),
          pos = FDR < 0.10 & MLE > 1,
          puri = FDR < 0.10 & MLE < 1) %>% 
-  filter(!grepl('^A$|^B$|Morus|Batocarpus',Branch)) 
+  filter(!grepl('^A$|^B$',Branch)) 
 hist(wstats_clean$omega)
-write_tsv(wstats_clean,'Node_dNdS_20260406-RInput.tsv')
+fwrite(wstats_clean,'~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz')
+wstats_clean <- fread('~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz') %>% as_tibble %>% 
+  filter(!grepl('^A$|^B$|Morus|Batocarpus',Branch)) 
 
+# for 4fold: extract the genes with all tips
+beasts <- wstats_clean %>% filter(n_A_tips == 9 & n_B_tips == 9) %>% pull(Gene) %>% unique
+write.table(beasts,file='20260422_FullTreeGenes.list',quote=F,sep='\t',row.names=F,col.names = F)
+
+# First, aggregate: compare # purified genes to total for each branch 
 # Build per-ID counts
 counts <- wstats_clean %>%
   mutate(
@@ -619,67 +631,113 @@ idord <- c('HART001','HART063','HART067','HART058','HART062','HART027','HART068'
 idord <- c('A. altilis','A. mariannensis','A. camansi','A. rigidus','A. odoratissimus','A. heterophyllus','A. nitidus','A. lacucha','A. dadah','J','I','H','G','F','E','D','C')
 
 # import md
-md <-  read_tsv('~/symlinks/comp/samples.txt') %>% dplyr::select(ID=Accession,Group) %>% mutate(ID = gsub('_','',ID))
+md <-  read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% dplyr::select(ID=Accession,Group) %>% mutate(ID = gsub('_','',ID))
 
-# Add Fisher exact 95% CI for purifying rows (no continuity correction)
-res_puri <- res_df %>%
-  filter(outcome == "puri") %>%
-  rowwise() %>%
-  mutate(
-    ft = list(fisher.test(matrix(c(a, b, c, d), nrow = 2, byrow = TRUE))),  # exact
-    ci_lo = ft$conf.int[1],
-    ci_hi = ft$conf.int[2]
-  ) %>%
-  ungroup() %>%
-  dplyr::select(-ft) %>% 
-  left_join(.,md) %>% 
-  mutate(Group = factor(ifelse(is.na(Group),ID,Group),levels=rev((idord))),
-         contrast = paste(L1, "vs", L2))
+##### Compare exact homeologs #####
+homeolog_diff <- wstats_clean %>% 
+  # filtered for matched IDs (both homeologs) from the same genes 
+  group_by(Gene,ID) %>% 
+  mutate(count = n()) %>% 
+  filter(count > 1) %>% 
+  dplyr::select(Gene,ID,Subset,Subg,omega,pos,puri) %>% 
+  # calc log2 diff 
+  pivot_wider(names_from = Subg, values_from = c(omega,pos,puri)) %>% 
+  mutate(log2_omega_ratio = log2((omega_A + 1e-6)/(omega_B + 1e-6)))
 
-puri_plot <- res_puri %>% 
-  ggplot(aes(x = odds_ratio, y = Group)) +
-  geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi), height = 0.25, color = "grey55") +
-  geom_point(aes(color = sig), size = 2.4) +
-  geom_text(aes(label = ifelse(sig, "*", "")), nudge_x = 0.05, size = 5) +
-  geom_vline(xintercept = 1, linetype = "dashed") +
-  scale_color_manual(values = c(`TRUE` = "#D95F02", `FALSE` = "#1B9E77"), guide = "none") +
-  #scale_x_log10() +
-  facet_grid(.~ contrast) +
-  labs(x = "Odds ratio",y = NULL) +
-  #coord_cartesian(xlim=c(-1,1))+
+# filter for very small omega
+# drop near-zeros
+min_omega <- 1e-3 
+homeolog_diff2 <- homeolog_diff %>%
+  filter(omega_A >= min_omega, omega_B >= min_omega) %>%
+  mutate(log2_omega_ratio = log2(omega_B/omega_A))
+
+# summary stats 
+idord <- c('altilis','mariannensis','camansi','rigidus','odoratissimus','heterophyllus','nitidus','lacucha','dadah','J','I','H','G','F','E','D','C')
+homeo_puri <- homeolog_diff2 %>% 
+  group_by(ID) %>% 
+  sum_stats(log2_omega_ratio) %>%   
+  left_join(.,md %>% mutate(Group = gsub('A. ','',Group))) %>%
+  mutate(Group = factor(ifelse(is.na(Group),ID,Group),levels=rev((idord))))
+
+homeo_puri_plot <- homeo_puri %>% 
+  ggplot(aes(x = mean, y = Group)) +
+  geom_errorbarh(aes(xmin = conf_low, xmax = conf_high), height = 0.25, color = "grey55") +
+  geom_point() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  coord_cartesian(xlim=c(-0.65,0.65))+
+  xlab('log2(B/A) w')+ylab('')+
   theme_bw(base_size = 12) +
   theme(strip.text = element_text(face = "bold"))
-puri_plot
+homeo_puri_plot
+ggsave('~/symlinks/comp/figures/20260414_PurifiedBranches.pdf',homeo_puri_plot,height=3,width=2.5)
 
-## log2 scale
-plt_df <- res_puri %>%
+# log odds ratio & stats
+min_omega <- 1e-3
+
+homeolog_bin <- homeolog_diff %>%
+  filter(omega_A >= min_omega, omega_B >= min_omega) %>%
   mutate(
-    x     = log2(odds_ratio),
-    xmin  = log2(ci_lo),
-    xmax  = log2(ci_hi)
-  ) 
+    B_more_constrained = omega_B < omega_A,
+    A_more_constrained = omega_A < omega_B
+  )
 
-# Axis breaks and labels: -2,-1,0,1,2 => L2×4, L2×2, equal, L1×2, L1×4
-brks <- c(-2, -1, 0, 1, 2)
-labs <- c("×4",
-          "×2",
-          "equal",
-          "×2",
-          "×4")
+log2or_by_ID <- homeolog_bin %>%
+  group_by(ID) %>%
+  summarise(
+    b = sum(B_more_constrained, na.rm = TRUE),
+    a = sum(A_more_constrained, na.rm = TRUE),
+    ties = sum(omega_A == omega_B, na.rm = TRUE),
+    n_discord = a + b,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    OR = (b + 0.5) / (a + 0.5),
+    log2OR = log2(OR),
+    se = sqrt(1/(b+0.5) + 1/(a+0.5)),
+    ci_lo = log2OR - 1.96 * se,
+    ci_hi = log2OR + 1.96 * se
+  ) %>%
+  rowwise() %>%
+  mutate(
+    p = if (n_discord > 0) binom.test(b, n_discord, p = 0.5)$p.value else NA_real_
+  ) %>%
+  ungroup() %>%
+  mutate(
+    p_adj = p.adjust(p, method = "BH"),
+    sig = !is.na(p_adj) & p_adj < 0.05
+  ) %>%
+  left_join(md %>% mutate(Group = gsub('A. ','',Group)), by = "ID") %>%
+  mutate(Group = factor(ifelse(is.na(Group), ID, Group), levels = rev(idord)))
 
-puri_plot <- ggplot(plt_df, aes(x = x, y = Group)) +
-  geom_errorbarh(aes(xmin = xmin, xmax = xmax), height = 0.25, color = "grey55") +
+brks <- log2(c(0.5, 2/3, 1, 1.5, 2))
+labs <- c("0.5× odds", "0.67× odds", "equal", "1.5× odds", "2× odds")
+homeo_puri_plot_or <- ggplot(log2or_by_ID, aes(x = log2OR, y = Group)) +
+  geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi), height = 0.25, color = "grey55") +
   geom_point(aes(color = sig), size = 2.8) +
-  geom_text(aes(label = ifelse(sig, "*", "")), nudge_x = 0.15, size = 5) +
+  geom_text(aes(label = ifelse(sig, "*", "")), nudge_x = 0.10, size = 4) +
   geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_color_manual(values = c(`TRUE` = "#D95F02", `FALSE` = "#1B9E77"), guide = "none") +
-  scale_x_continuous(breaks = brks, labels = labs) +
-  labs(x = "log2(OR)",y = NULL) +
-  facet_grid(.~ contrast) +
-  theme_bw(base_size = 8)
-puri_plot
-ggsave('~/symlinks/comp/figures/20260406_PurifiedBranches_Log2Odds.pdf',puri_plot,height=3,width=5)
+  scale_color_manual(values = c(`TRUE` = 'darkviolet', `FALSE` = 'grey30'), guide = "none") +
+  labs(x = "log2(OR) (B more constrained vs A)", y = NULL) +
+  theme_bw(base_size = 8)+
+  scale_x_continuous(breaks = brks, labels = labs,limits=c(-1.1,1.1))
+homeo_puri_plot_or
+ggsave('~/symlinks/comp/figures/20260414_logOR_Homeolog_PurifiedBranches.pdf',homeo_puri_plot,height=3,width=2.5)
 
+# extract top 
+puri_cands <- homeolog_diff2 %>% 
+  filter(ID == 'C' | ID == 'J') %>% 
+  ungroup %>% 
+  mutate(cand = ifelse(ID == 'C' & log2_omega_ratio > 0.5,'candidate',
+                       ifelse(ID == 'J' & log2_omega_ratio < 0.5, 'candidate','other'))) %>% 
+  filter(cand != 'other') %>% filter(puri_A == TRUE | puri_B == TRUE) %>% mutate(cand = 'purifying')
+pos_cands <- homeolog_diff2 %>% 
+  filter(ID == 'C' | ID == 'J') %>% 
+  ungroup %>% 
+  mutate(cand = ifelse(ID == 'C' & log2_omega_ratio > 0.5,'candidate',
+                       ifelse(ID == 'J' & log2_omega_ratio < 0.5, 'candidate','other'))) %>% 
+  filter(cand != 'other') %>% filter(pos_A == TRUE | pos_B == TRUE) %>% mutate(cand = 'positive')
+homeo_cands <- rbind(puri_cands,pos_cands)
+write.table(homeo_cands,file='TopHomeologs_20260414.tsv',quote=F,sep='\t',row.names=F)
 
 ##### Plot per-branch variation #####
 # per-branch summaries
@@ -707,62 +765,10 @@ summarize_branch_metrics <- function(df) {
 branch_summ <- summarize_branch_metrics(wstats_clean)
 branch_summ 
 
-##### Plot dNdS on the tree: lwd and color POSITIVE #####
-# Limits for the plot 
-omega_limits <- range(branch_summ$med_omega, na.rm = TRUE)
-pos_limits <- range(branch_summ$pos_frac, na.rm = TRUE)
-probs <- c(0.10, 0.30, 0.70, 0.90)
-breaks <- round(quantile(branch_summ$med_omega, probs = probs, na.rm = TRUE, names = FALSE),2)
-colors <- viridis(length(breaks) + 1, option = "plasma")
-
-# now throw that on the trees
-plot_branch_summary_tree <- function(tr, branch_summ, subset_id, title = NULL, expand_x = 1.3) {
-  # Build tree data and join branch summaries
-  td <- fortify(tr) %>% 
-    dplyr::left_join(
-      branch_summ %>% 
-        dplyr::filter(Subset == subset_id) %>% 
-        mutate(Branch = ifelse(Subset != '22',gsub('[1|2]$','',Branch),Branch)),
-      by = c("label" = "Branch"))
-  
-  # Base tree
-  p <- ggtree(tr) %<+% td +
-    geom_tree(aes(color = med_omega, linewidth = pos_frac)) +
-    geom_tiplab(size = 3.0) +
-    theme_tree() +
-    labs(title = paste0("Subset ", subset_id)) +
-    scale_color_stepsn(
-      name    = "Median dN/dS",
-      colors  = colors,
-      breaks  = breaks,
-      limits  = omega_limits,
-      na.value = "grey80"
-    ) +
-    scale_linewidth_continuous(
-      name  = "Frac FDR<0.1 & dnds>1",
-      range = c(0.5, 2.5),limits=pos_limits)
-  
-  # Expand x-axis to create room for tip labels
-  xmax <- max(p$data$x, na.rm = TRUE)
-  p <- p + ggplot2::xlim(0, xmax * expand_x)
-  
-  return(p)
-}
-
-
-pA  <- plot_branch_summary_tree(tr_A,  branch_summ, subset_id = "A")
-pB  <- plot_branch_summary_tree(tr_B,  branch_summ, subset_id = "B")
-p22 <- plot_branch_summary_tree(tr_22, branch_summ, subset_id = "22")
-allplot <- ggarrange(pA,pB,p22,nrow=1,common.legend = TRUE)
-allplot
-ggsave('~/symlinks/comp/figures/20260319_Subgenome_dNdS_BranchColors.pdf',
-       allplot,height=4,width=8)
-
-
 ##### Plot dNdS on the tree: lwd and color PURIFYING #####
 
 # read in md
-md <- read_tsv('~/symlinks/comp/samples.txt') %>% dplyr::select(ID=Accession,Species,Group) %>% mutate(ID = gsub('_','',ID),Group = gsub('A. ','',Group))
+md <- read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% dplyr::select(ID=Accession,Species,Group) %>% mutate(ID = gsub('_','',ID),Group = gsub('A. ','',Group))
 
 # Limits for the plot, in case we want to do discrete bins  
 pur_limits <- range(branch_summ$puri_frac, na.rm = TRUE)
@@ -829,10 +835,9 @@ td <- fortify(tr_A)
 td %>% filter(label %in% branch_summ$Branch) %>% count(isTip)
 
 ##### A vs B: branch‑wise comparison plots #####
-#### Positive selection A/B
 subg_sel <- counts %>%
   left_join(md) %>% 
-  mutate(pos_frac = pos/total, puri_frac = puri/total) %>% 
+  mutate(puri_frac = puri/total) %>% 
   separate(Localization, into = c('Subset','Subg'),remove=TRUE) %>% 
   pivot_wider(names_from=Subg, id_cols = c(ID,Group,Subset), values_from = puri_frac) %>% 
   filter(Subset == 'Shared') %>% 
@@ -851,45 +856,43 @@ subg_sel <- counts %>%
 subg_sel
 ggsave('~/symlinks/comp/figures/20260406_SubgenomeFraction_Purifying.pdf',subg_sel,height=5,width=7)
 
-##### OF those branches (C) with high A/B variation: what are the top candidates? ######
-gene_pair <- wstats_clean %>%
-  filter(Localization %in% c("Shared_A", "Shared_B"), ID == "C") %>%
-  group_by(Gene, Localization) %>%
-  summarise(
-    omega_med = median(omega, na.rm = TRUE),
-    puri_frac = mean(puri, na.rm = TRUE),
-    pos_frac = mean(pos, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
-  ) %>%
-  pivot_wider(
-    names_from = Localization,
-    values_from = c(omega_med, puri_frac, pos_frac, n),
-    names_sep = "."
-  ) %>%
-  mutate(
-    log2_omega_ratio = log2((omega_med.Shared_A + 1e-6)/(omega_med.Shared_B + 1e-6)),
-    delta_puri = puri_frac.Shared_A - puri_frac.Shared_B,
-    category = case_when(
-      puri_frac.Shared_A >= 0.5 & puri_frac.Shared_B <= 0.1 &
-        pos_frac.Shared_B <= 0.05 & log2_omega_ratio < -1 ~ "A_biased_purifying",
-      puri_frac.Shared_B >= 0.5 & puri_frac.Shared_A <= 0.1 &
-        pos_frac.Shared_A <= 0.05 & log2_omega_ratio > 1 ~ "B_biased_purifying",
-      TRUE ~ "other"
-    )
-  )
-top_puri_genes <- gene_pair %>% dplyr::select(Gene,category) %>% filter(category != 'other')
+##### Also just grab the unique C branch genes? ######
 top_puri_uniq <- wstats_clean %>% filter(ID == 'C' & puri == TRUE & grepl('Unique',Localization))  %>% dplyr::select(Gene,category=Localization)
-top_puri <- rbind(top_puri_genes,top_puri_uniq)
-write.table(top_puri,file='TopGenes_Puri_20260406.tsv',quote=F,sep='\t',row.names=F)
-
-# also save full file with the gene pair dnds 
-savedf <- gene_pair %>% dplyr::select(Gene, omega_med.Shared_A, omega_med.Shared_B, log2_omega_ratio, delta_puri, category)
-write.table(savedf,file='AllGenes_Puri_20260406.tsv',quote=F,sep='\t',row.names=F)
+write.table(top_puri_uniq,file='TopGenes_Puri_20260420.tsv',quote=F,sep='\t',row.names=F)
 
 ```
 
+
+
 #### Plot Functions
+
+First, use interproscan to identify the function of the Morus genes (which are used as anchors):
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=2-00:00:00   
+#SBATCH --nodes=1  
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=52Gb
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+#module load miniconda
+#mamba create -n interpro -c conda-forge -c bioconda interproscan nextflow>=25.04.6 -y
+#source activate interpro
+
+RUN="${1:?usage: $0 <FASTA>}"
+DATA_DIR=/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/interproscan
+BASE=$(basename ${RUN})
+echo "Running on ${BASE}"
+
+interproscan.sh \
+  -i ${RUN} \
+  -f tsv \
+  --goterms --pathways \
+  --cpu 8
+```
 
 This maps candidate subgenome-biased purifying-selection genes to GO terms (from InterProScan on *Morus*) and runs Fisher-test GO enrichment (vs a genome-wide universe) to highlight overrepresented functions.
 
@@ -900,25 +903,23 @@ Outputs
 - Candidate gene <-> GO table for highlighted terms: `TopGenes_Puri_SubgenomeA_20260406.tsv`
 
 ```R
-setwd("/project/coffea_pangenome/Artocarpus/Comparative_Paper/subgenome_divided_dnds/")
+setwd("~/artocarpus_comparative_genomics/09_subgenome_dnds/")
 # Subgenome-specific selection: functional annotation of genes 
 library(tidyverse)
 library(scales)
 library(stringr)
 library(GO.db)
 library(AnnotationDbi)
-library(data.table)
+library(data.table)	
 library(ggrepel)
 
 # Read in genes 
-genes <- read_tsv("TopGenes_Puri_20260406.tsv")
-wstats_clean <- read_tsv("Node_dNdS_20260406-RInput.tsv")
+genes <- read_tsv("TopGenes_Puri_20260420.tsv")
+wstats_clean <- fread("Node_dNdS_20260420-RInput.tsv.gz") %>% as_tibble
+homeo <- read_tsv("TopHomeologs_20260414.tsv")
 
-id <- readr::read_tsv(
-  "/project/coffea_pangenome/Artocarpus/Comparative_Paper/orthofinder/Subgenome_Divided/interproscan/Morus.tsv",
-  col_names = FALSE, show_col_types = FALSE
-) %>%
-  transmute(Gene = X1, source_db = X4, interpro_id = X12, go_raw = X14) %>%
+id <- fread("Morus.tsv.gz") %>% as_tibble %>%
+  transmute(Gene = V1, source_db = V4, interpro_id = V12, go_raw = V14) %>%
   distinct()
 
 gene2go_long <- id %>%
@@ -930,16 +931,6 @@ gene2go_long <- id %>%
   filter(!is.na(GO)) %>%
   distinct(Gene, GO)
 
-# gene2go_long <- id %>%
-#   filter(!is.na(go_raw), go_raw != "-", str_detect(go_raw, "GO:")) %>%
-#   separate_rows(go_raw, sep="\\|") %>%
-#   mutate(GO = str_extract(go_raw, "GO:\\d{7}")) %>%
-#   filter(!is.na(GO)) %>%
-#   distinct(Gene, GO, source_db) %>%
-#   count(Gene, GO, name="n_sources") %>%
-#   filter(n_sources >= 2) %>%
-#   dplyr::select(Gene, GO)
-
 # All genes 
 universe_genes <- sort(unique(wstats_clean$Gene))
 universe_genes <- intersect(universe_genes, unique(gene2go_long$Gene))
@@ -947,15 +938,17 @@ length(universe_genes)
 
 ##### PURIFYING SELECTION #####
 # Candidates 
-sA <- unique(genes$Gene[genes$category == "A_biased_purifying"])
-sB <- unique(genes$Gene[genes$category == "B_biased_purifying"])
 uA <- unique(genes$Gene[genes$category == "Unique_A"])
 uB <- unique(genes$Gene[genes$category == "Unique_B"])
+hC <- homeo %>% filter(ID == 'C' & cand == 'purifying') %>% pull(Gene)
+hJ <- homeo %>% filter(ID == 'J' & cand == 'purifying') %>% pull(Gene)
+pos <- homeo %>% filter(cand == 'positive') %>% pull(Gene)
 
-sA <- intersect(sA, universe_genes)
-sB <- intersect(sB, universe_genes)
 uA <- intersect(uA, universe_genes)
 uB <- intersect(uB, universe_genes)
+hC <- intersect(hC, universe_genes)
+hJ <- intersect(hJ, universe_genes)
+pos <- intersect(pos, universe_genes)
 
 # Map ontology
 go_ontology <- AnnotationDbi::select(
@@ -1017,17 +1010,18 @@ enrich_go_fisher <- function(cand_genes, universe_genes, gene2go_annot, ontology
   res
 }
 
-mf_sA <- enrich_go_fisher(sA, universe_genes, gene2go_annot, ontology = "MF")
-mf_sB <- enrich_go_fisher(sB, universe_genes, gene2go_annot, ontology = "MF")
 mf_uA <- enrich_go_fisher(uA, universe_genes, gene2go_annot, ontology = "MF")
 mf_uB <- enrich_go_fisher(uB, universe_genes, gene2go_annot, ontology = "MF")
-
+mf_hC <- enrich_go_fisher(hC, universe_genes, gene2go_annot, ontology = "MF")
+mf_hJ <- enrich_go_fisher(hJ, universe_genes, gene2go_annot, ontology = "MF")
+mf_pos <- enrich_go_fisher(pos, universe_genes, gene2go_annot, ontology = "MF")
 
 plot_df <- bind_rows(
-  mf_sA %>% mutate(Set = "Shared A"),
-  mf_sB %>% mutate(Set = "Shared B"),
   mf_uA %>% mutate(Set = "Unique A"),
-  mf_uB %>% mutate(Set = "Unique B")
+  mf_uB %>% mutate(Set = "Unique B"),
+  mf_hC %>% mutate(Set = "Homeologs C"),
+  mf_hJ %>% mutate(Set = "Homeologs J"),
+  mf_pos %>% mutate(Set = "Positive Selection")
 ) %>%
   mutate(
     sig10 = !is.na(p_adj) & p_adj < 0.10,
@@ -1039,6 +1033,10 @@ plot_df <- bind_rows(
   slice_head(n = 15) %>%
   ungroup()
 
+plot_df %>% filter(Set == 'Homeologs C') %>% dplyr::select(TERM,p_adj,fold_enrich,sig10)
+plot_df %>% filter(Set == 'Homeologs J') %>% dplyr::select(TERM,p_adj,fold_enrich,sig10)
+plot_df %>% filter(Set == 'Positive Selection') %>% dplyr::select(TERM,p_adj,fold_enrich,sig10)
+
 plot_df %>% filter(Set == 'Unique A') %>% dplyr::select(TERM,p_adj,fold_enrich,sig10)
 plot_df %>% filter(Set == 'Unique A' & grepl('manno|carb',TERM)) %>% dplyr::select(GO,bg_with_term,cand_with_term,TERM,p_adj,fold_enrich,sig10)
 # GO         bg_with_term cand_with_term TERM                         p_adj fold_enrich sig10
@@ -1048,7 +1046,7 @@ plot_df %>% filter(Set == 'Unique A' & grepl('manno|carb',TERM)) %>% dplyr::sele
 
 # plot
 enrich_plot <- plot_df %>% 
-  filter(Set == 'Unique A') %>% 
+  filter(Set == 'Unique A' | Set == 'Homeologs C') %>% 
   ggplot(aes(x = fold_enrich, y = reorder(label, fold_enrich))) +
   geom_point(aes(shape = sig10, size = cand_with_term, color = fold_enrich)) +
   facet_wrap(~ Set, scales = "free_y") +
@@ -1068,7 +1066,7 @@ enrich_plot <- plot_df %>%
     x = "Fold enrichment (log10 scale)",
     y = NULL
   ) +
-  scale_y_discrete(labels = function(x) str_wrap(x, width = 30)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 25)) +
   theme_bw(base_size = 8) +
   theme(
     legend.position = "right",
@@ -1076,7 +1074,7 @@ enrich_plot <- plot_df %>%
   )
 enrich_plot
 
-ggsave('~/symlinks/comp/figures/20260406_PurifyingSubgenomeA_Enrichment.pdf',enrich_plot,height=3.5,width=3.5)
+ggsave('~/symlinks/comp/figures/20260414_GO_Enrichment.pdf',enrich_plot,height=2.5,width=5.5)
 
 # Extract those genes
 cands <- gene2go_annot %>% filter(grepl('0030246|0004559',GO)) %>% filter(Gene %in% uA) %>% data.frame

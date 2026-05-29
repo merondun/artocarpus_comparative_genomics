@@ -6,7 +6,7 @@ Outputs:
 
 Panel a from:
 
-![beast](/20260528_GeneTrees_BEAST_kS.png)
+![beast](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 
 Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
 

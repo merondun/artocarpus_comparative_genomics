@@ -2,9 +2,9 @@
 
 This prepares cleaned CDS FASTAs and the ARtocarpus GFF3, then runs kSRates (in manual mode) to estimate paralog and ortholog Ks distributions across Artocarpus–Batocarpus–Morus and perform rate adjustment before generating plots. 
 
-This corresponds to panel B:
+This corresponds to panel c:
 
-![ksrates](/figures/20260304_GeneTrees_BEAST_kS.png)
+![ksrates](/figures/panels/04_subgenome_history/20260528_GeneTrees_BEAST_kS.png)
 
 ___
 
