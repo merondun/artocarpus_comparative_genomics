@@ -2,7 +2,7 @@
 
 End-to-end comparative genomics for *Artocarpus* (and outgroups), spanning genome QC/assembly, Iso-Seq annotation, whole-genome alignments, orthology/ancestral reconstruction, and subgenome-aware evolutionary analyses (synteny, dN/dS, expression bias, Ks rate adjustment, and quartet discordance/BEAST dating).
 
-Core sample metadata live in `samples.txt` (with ordering/plot aesthetics) and `Accessions.list` (accession subset used across pipelines).
+Sample metadata live in `samples.txt` (with ordering/plot aesthetics) and `Accessions.list` (accession subset used across pipelines).
 
 ## Directory map
 
