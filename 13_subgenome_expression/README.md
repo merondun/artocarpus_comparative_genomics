@@ -4,9 +4,13 @@ This section quantifies RNA-seq/Iso-Seq read expression against the combined HAR
 
 This corresponds to panel E:
 
-![expressoin](/figures/20260407_SubgenomeEvolution.png)
+![expression](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 
-___
+
+
+____
+
+
 
 Outputs
 
@@ -63,13 +67,13 @@ library(readr)
 library(ggrepel)
 
 # Read in top puri genes from scan 
-genes <- read_tsv("/project/coffea_pangenome/Artocarpus/Comparative_Paper/subgenome_divided_dnds/TopGenes_Puri_SubgenomeA_20260406.tsv")
+genes <- read_tsv("~/artocarpus_comparative_genomics/09_subgenome_dnds/TopHomeologs_20260414.tsv")
 
 # import dnds for shared copies of all paired genes 
-savedf <- read_tsv('/project/coffea_pangenome/Artocarpus/Comparative_Paper/subgenome_divided_dnds/AllGenes_Puri_20260406.tsv')
+wstats_clean <- fread('~/artocarpus_comparative_genomics/09_subgenome_dnds/Node_dNdS_20260420-RInput.tsv.gz') %>% as_tibble
 
 # read in morus ~ arto/bato gene ID lookups
-ids <- read_tsv('Morus_Lookup.tsv',col_names = F)
+ids <- read_tsv('~/artocarpus_comparative_genomics/10_subgenome_expression/Morus_Lookup.tsv',col_names = F)
 names(ids) <- c('Morus','RBH')
 
 # read in isoseq data, first for artocarpus
@@ -115,60 +119,165 @@ hart_tpm2 <- hart_tpm %>%
     )
   )
 
+
+### batocarpus
+samples_b <- samples %>% filter(prefix != "HART063")
+files_b <- samples_b$quant
+names(files_b) <- samples_b$sample
+txi_b <- tximport(files_b, type = "salmon", txOut = TRUE, ignoreTxVersion = TRUE)
+
+# convert to tpm martrix
+bato_tpm <- as_tibble(txi_b$abundance, rownames = "RBH") %>%
+  pivot_longer(-RBH, names_to = "sample", values_to = "TPM") %>%
+  left_join(samples_b, by = "sample")
+
+# map to hart
+bato_tpm2 <- bato_tpm %>%
+  left_join(ids, by = "RBH") 
+
+bato_gene <- bato_tpm2 %>%
+  filter(!is.na(Morus)) %>%
+  group_by(Morus, tissue) %>%
+  summarise(TPM_bato = sum(TPM, na.rm = TRUE), .groups = "drop")
+
 # sumarize Arto A/B to Morus
 hart_AB <- hart_tpm2 %>%
   filter(!is.na(Morus), !is.na(subgenome)) %>%
   group_by(Morus, tissue, subgenome) %>%
   summarize(TPM = sum(TPM, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = subgenome, values_from = TPM, values_fill = 0) %>%
+  pivot_wider(names_from = subgenome, values_from = TPM, values_fill = NA) %>%
   mutate(
     total_AB = A + B,
     log2_BA = log2((B + 1) / (A + 1))
   )
-write_tsv(hart_AB,   "hart_AB.tsv")
+write_tsv(hart_AB, "~/artocarpus_comparative_genomics/10_subgenome_expression/hart_AB.tsv")
+write_tsv(bato_gene, "~/artocarpus_comparative_genomics/10_subgenome_expression/batocarpus.tsv")
+hart_AB <- read_tsv('~/artocarpus_comparative_genomics/10_subgenome_expression/hart_AB.tsv')
+bato_gene <- read_tsv('~/artocarpus_comparative_genomics/10_subgenome_expression/batocarpus.tsv')
 
-# Plot log2(B/A) expression across purifying categories
-exp_omega <- left_join(hart_AB %>% dplyr::rename(Gene = Morus),savedf %>% mutate(omega_diff = omega_med.Shared_A - omega_med.Shared_B)) %>% drop_na(category)
+##### For each selection regime, compare arto/bato expression #####
+outgroups <- wstats_clean %>% 
+  filter(grepl('HART063|Bato',Branch)) %>% 
+  dplyr::select(Gene,Branch,puri) %>% 
+  pivot_wider(names_from = Branch,values_from = puri) %>% 
+  drop_na(Batocarpus) %>% 
+  mutate(purifying_arto = case_when(
+    is.na(HART063B) & is.na(HART063A) ~ NA,
+    is.na(HART063B) & !is.na(HART063A) ~ HART063A,
+    !is.na(HART063B) & is.na(HART063A) ~ HART063B,
+    HART063A == TRUE | HART063B == TRUE ~ TRUE,
+    HART063A == FALSE & HART063B == FALSE ~ FALSE),
+    subset = case_when(
+      is.na(HART063B) & is.na(HART063A) ~ NA,
+      is.na(HART063B) & !is.na(HART063A) ~ 'A-unique',
+      !is.na(HART063B) & is.na(HART063A) ~ 'B-unique',
+      !is.na(HART063B) & !is.na(HART063A) ~ 'Homeologs')
+  ) %>% 
+  drop_na(purifying_arto) %>%
+  dplyr::select(Gene,purifying_bato = Batocarpus,purifying_arto,subset) %>% 
+  mutate(category = case_when(
+    purifying_bato == TRUE & purifying_arto == TRUE ~ 'Both',
+    purifying_bato == FALSE & purifying_arto == TRUE ~ 'Arto-only',
+    purifying_bato == TRUE & purifying_arto == FALSE ~ 'Bato-only',
+    purifying_bato == FALSE & purifying_arto == FALSE ~ 'Neither',
+    TRUE ~ NA
+  ))
 
-# reduce to gene level 
-exp_gene <- exp_omega %>%
-  group_by(Gene, category) %>%
-  summarise(mean_log2_BA = mean(log2_BA, na.rm = TRUE), .groups = "drop")
-pairwise.wilcox.test(exp_gene$mean_log2_BA, exp_gene$category, p.adjust.method = "holm")
+unique_subs <- c("A-unique","Homeologs","B-unique")
+unique_cats <- c('Arto-only','Both','Neither','Bato-only')
 
-# plot it 
-plot_sum <- exp_gene %>%
-  mutate(category = factor(category,
-                           levels = c("A_biased_purifying", "other", "B_biased_purifying"))) %>%
-  group_by(category) %>%
+unique_df <- hart_AB %>%
+  dplyr::rename(Gene = Morus) %>%
+  mutate(
+    subset = case_when(
+      is.na(A) ~ 'B-unique',
+      is.na(B) ~ 'A-unique',
+      !is.na(A) & !is.na(B) ~ 'Homeologs',
+      TRUE ~ NA
+    ),
+    TPM_present = case_when(
+      is.na(A) ~ B,
+      is.na(B) ~ A,
+      !is.na(A) & !is.na(B) ~ total_AB,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  drop_na(TPM_present) %>% 
+  dplyr::select(Gene,tissue,subset,TPM_present) %>% 
+  left_join(bato_gene %>% dplyr::rename(Gene = Morus), by = c("Gene", "tissue")) %>%
+  filter(!is.na(TPM_bato)) %>%
+  mutate(log2_Arto_vs_Bato = log2((TPM_present + 1) / (TPM_bato + 1)))
+
+unique_gene <- unique_df %>%
+  left_join(outgroups %>% dplyr::select(Gene, subset, category)) %>% 
+  drop_na(category) %>% 
+  group_by(Gene, subset, category) %>%
+  summarise(mean_log2_Arto_vs_Bato = mean(log2_Arto_vs_Bato, na.rm = TRUE), .groups = "drop") %>%
+  mutate(subset = factor(subset, levels = unique_subs),
+         category = factor(category, levels = unique_cats))
+write_tsv(unique_gene,'~/artocarpus_comparative_genomics/10_subgenome_expression/20260420_ExpressionSelectionlog2-ArtocarpusBatocarpus.tsv')
+
+unique_w0 <- unique_gene %>%
+  group_by(subset,category) %>%
   summarise(
-    mean = mean(mean_log2_BA, na.rm = TRUE),
-    sd = sd(mean_log2_BA, na.rm = TRUE),
+    n = n(),
+    p_value = wilcox.test(mean_log2_Arto_vs_Bato, mu = 0)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p_value, method = "holm"),
+    sig = case_when(
+      p_adj <= 0.05  ~ "*",
+      TRUE ~ "ns"
+    )
+  )
+
+unique_sum <- unique_gene %>%
+  group_by(subset,category) %>%
+  summarise(
+    mean = mean(mean_log2_Arto_vs_Bato),
+    sd = sd(mean_log2_Arto_vs_Bato),
     n = n(),
     se = sd / sqrt(n),
     conf_low = mean - 1.96 * se,
     conf_high = mean + 1.96 * se,
     .groups = "drop"
-  )
+  ) %>%
+  left_join(unique_w0) %>%
+  mutate(y_lab = pmax(conf_high, 0) + 0.05 * diff(range(c(conf_low, conf_high), na.rm = TRUE)))
 
-exp_plot <- ggplot(plot_sum, aes(x = category, y = mean, color = category)) +
+# subset    category     mean    sd     n     se conf_low conf_high  p_value   p_adj sig   y_lab
+# <fct>     <fct>       <dbl> <dbl> <int>  <dbl>    <dbl>     <dbl>    <dbl>   <dbl> <chr> <dbl>
+#   1 A-unique  Arto-only -0.0786  1.87    68 0.226   -0.522     0.365  0.246    0.492   ns    0.487
+# 2 A-unique  Both      -0.447   1.65    97 0.167   -0.775    -0.119  0.00138  0.0124  *     0.122
+# 3 A-unique  Neither   -0.246   1.84   432 0.0888  -0.420    -0.0722 0.000291 0.00320 *     0.122
+# 4 A-unique  Bato-only -0.267   1.72   173 0.131   -0.524    -0.0108 0.00687  0.0481  *     0.122
+# 5 Homeologs Arto-only  0.383   1.63   164 0.127    0.134     0.633  0.0101   0.0506  ns    0.754
+# 6 Homeologs Both       0.182   1.63   425 0.0789   0.0271    0.337  0.127    0.380   ns    0.458
+# 7 Homeologs Neither    0.0689  1.91   451 0.0899  -0.107     0.245  0.739    0.739   ns    0.367
+# 8 Homeologs Bato-only  0.261   1.67   390 0.0848   0.0945    0.427  0.0151   0.0602  ns    0.549
+# 9 B-unique  Arto-only -1.23    2.02    48 0.291   -1.81     -0.663  0.000121 0.00146 *     0.122
+# 10 B-unique  Both      -0.489   1.36    67 0.166   -0.814    -0.164  0.00796  0.0481  *     0.122
+# 11 B-unique  Neither   -0.364   2.06   263 0.127   -0.613    -0.115  0.00315  0.0252  *     0.122
+# 12 B-unique  Bato-only -0.513   1.86   153 0.150   -0.808    -0.218  0.000821 0.00821 *     0.122
+
+p_unique <- ggplot(unique_sum, aes(x = subset, y = mean, fill = category,shape=category)) +
   geom_hline(yintercept = 0, linetype = 2, color = "grey55") +
-  geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.10, linewidth = 0.7) +
-  geom_point(size = 2.8) +
-  scale_color_manual(values = c(
-    "A_biased_purifying" = "#1b9e77",
-    "other" = "grey55",
-    "B_biased_purifying" = "#d95f02"
-  )) +
-  labs(x = NULL, y = "Mean log2(B/A) expression per gene") +
-  theme_bw(base_size = 9) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank(),
-    axis.text.x = element_text(face = "bold")
-  )
+  geom_errorbar(aes(color = category, ymin = conf_low, ymax = conf_high), width = 0.12, linewidth = 0.7,position=position_dodge(width=0.5)) +
+  geom_point(size = 1.8,position=position_dodge(width=0.5)) +
+  geom_text(aes(y = y_lab, label = sig), color = "black", size = 2, vjust = 0,position=position_dodge(width=0.5)) +
+  scale_fill_manual(values = viridis(4)) +
+  scale_color_manual(values = viridis(4)) +
+  scale_shape_manual(values=c(21,24,25,22))+
+  labs(x = NULL, y = "Mean log2(Arto/Bato expression ratio)") +
+  theme_bw(base_size = 10) +
+  theme(legend.position = "top", panel.grid.minor = element_blank(),
+        axis.text.x = element_text(face = "bold")) +
+  coord_flip()
 
-ggsave('~/symlinks/comp/figures/20260406_Expression_Bias_Subgenome.pdf',exp_plot,height=2.5,width=1.5)
+p_unique
+
+ggsave('~/artocarpus_comparative_genomics/figures/20260420_Expression_Bias_Subgenome.pdf',p_unique,height=3.5,width=2.5)
 
 ```
 

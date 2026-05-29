@@ -1,4 +1,4 @@
-# Subgenome-divided BEAST
+## Subgenome-divided BEAST
 
 This workflow repeats the general process from [subgenome_divided_dnds](/09_subgenome_dnds/) except it includes *Ficus carica* as a more distant outgroup. 
 
@@ -6,7 +6,27 @@ Outputs:
 
 Panel a from:
 
-![beast](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
+![beast](/figures/panels/04_subgenome_history/20260528_GeneTrees_BEAST_kS.png)
+
+
+
+Tracer logs:
+
+Summaries from tracer:
+
+| Run                                            | Chains combined | Posterior ESS | Likelihood ESS | Prior ESS | Tree height mean | Tree height 95% HPD | Clock rate mean | Clock rate 95% HPD     |
+| ---------------------------------------------- | --------------- | ------------- | -------------- | --------- | ---------------- | ------------------- | --------------- | ---------------------- |
+| 150k Codons                                    | 50M             | 3576.9        | 3471.6         | 8236.5    | 82.9954          | [74.2704, 92.0288]  | 6.38E-04        | [5.7159E-4, 7.0889E-4] |
+| Four-fold Degenerate Sites                     | 50M             | 4375.4        | 4109.7         | 9001      | 83.0682          | [74.0576, 91.888]   | 1.76E-03        | [1.5752E-3, 1.956E-3]  |
+| Strict: Four-fold Degenerate Sites,  <30% Gaps | 50M             | 3610.6        | 3481.8         | 9001      | 83.012           | [73.7113, 91.492]   | 1.78E-03        | [1.5934E-3, 1.9789E-3] |
+
+
+
+
+
+___
+
+
 
 Take the cds files from: `/project/coffea_pangenome/Artocarpus/Comparative_Paper/annotation/egapx/copies_isoliftoff_longest_transcript_per_gene/cds` 
 
@@ -497,6 +517,14 @@ From the paper:
 ALSO run a BEAST analysis with the extra-filtered 4-fold sites, and one with 150k codons from the full gene alignments. 
 
 ### Plot BEAST
+
+Summaries from tracer:
+
+| Run                                            | Chains combined | Posterior ESS | Likelihood ESS | Prior ESS | Tree height mean | Tree height 95% HPD | Clock rate mean | Clock rate 95% HPD     |
+| ---------------------------------------------- | --------------- | ------------- | -------------- | --------- | ---------------- | ------------------- | --------------- | ---------------------- |
+| 150k Codons                                    | 50M             | 3576.9        | 3471.6         | 8236.5    | 82.9954          | [74.2704, 92.0288]  | 6.38E-04        | [5.7159E-4, 7.0889E-4] |
+| Four-fold Degenerate Sites                     | 50M             | 4375.4        | 4109.7         | 9001      | 83.0682          | [74.0576, 91.888]   | 1.76E-03        | [1.5752E-3, 1.956E-3]  |
+| Strict: Four-fold Degenerate Sites,  <30% Gaps | 50M             | 3610.6        | 3481.8         | 9001      | 83.012           | [73.7113, 91.492]   | 1.78E-03        | [1.5934E-3, 1.9789E-3] |
 
 ```R
 #### Plot BEAST annotated trees 
