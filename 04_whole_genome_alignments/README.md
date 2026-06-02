@@ -6,6 +6,21 @@ The output of this section will be a WGA:
 
 ![wga](/figures/20260409_WGA_N11.png)
 
+Tabulated inter-chromosomal vs intra-chromosomal alignments, compared to total aligned sequence:
+
+| Query   | Reference | Query Inter-chromosomal | Reference Inter-chromosomal | Query Total | Reference Total | Query Inter-chromosomal / Total | Reference Inter-chromosomal /  Total |
+| ------- | --------- | ----------------------- | --------------------------- | ----------- | --------------- | ------------------------------- | ------------------------------------ |
+| HART001 | HART067   | 1.8                     | 1.72                        | 765.49      | 729             | 0.23                            | 0.24                                 |
+| HART067 | HART063   | 3.41                    | 3.52                        | 728.11      | 732.74          | 0.47                            | 0.48                                 |
+| HART063 | HART061   | 2.61                    | 2.95                        | 598.41      | 686.22          | 0.43                            | 0.43                                 |
+| HART061 | HART062   | 2.86                    | 2.91                        | 635.22      | 636.71          | 0.45                            | 0.45                                 |
+| HART062 | HART058   | 3.15                    | 3                           | 780.61      | 796.43          | 0.4                             | 0.38                                 |
+| HART058 | HART027   | 1.78                    | 1.76                        | 635.02      | 709.43          | 0.28                            | 0.25                                 |
+| HART027 | HART060   | 4.12                    | 3.78                        | 558         | 474.71          | 0.73                            | 0.79                                 |
+| HART060 | N97_50    | 5.03                    | 5.12                        | 675.67      | 677.11          | 0.74                            | 0.75                                 |
+| N97_50  | HART068   | 14.08                   | 14.24                       | 657.48      | 666.07          | 2.1                             | 2.09                                 |
+| HART068 | N15_23    | 55.57                   | 68.63                       | 245.24      | 302.89          | 18.47                           | 18.47                                |
+
 ___
 
 Run the alignment:
