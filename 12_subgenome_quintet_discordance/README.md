@@ -6,7 +6,7 @@ Primary output:
 
 Panel b from:
 
-![discordance](20260528_GeneTrees_BEAST_kS.png)
+![discordance](/figures/panels/04_subgenome_history/20260528_GeneTrees_BEAST_kS.png)
 
 
 

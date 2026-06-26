@@ -4,7 +4,7 @@ Per‑pair whole‑genome alignments are generated with nucmer, filtered by leng
 
 The output of this section will be a WGA: 
 
-![wga](/figures/20260409_WGA_N11.png)
+![wga](/figures/panels/01_wga_fruits/20260409_WGA_N11.png)
 
 Tabulated inter-chromosomal vs intra-chromosomal alignments, compared to total aligned sequence:
 

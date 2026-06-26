@@ -6,7 +6,7 @@ Primary outputs:
 
 Panels a-c showing variation in selection across subgenomes:
 
-![subgenome](/figures/20260420_SubgenomeEvolution.png)
+![subgenome](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 
 ____
 

@@ -2,6 +2,14 @@
 
 This section documents the end-to-end workflow used to produce chromosome-scale *Artocarpus* assemblies from PacBio HiFi (primary contig generation and polishing) and Hi-C (scaffolding and validation). Assemblies are generated in a consistent, reproducible way across all accessions using Puzzler, and then curated with a standardized post-processing suite: contaminant screening/removal (BlobToolKit/BlobTools). Assembly-level summaries for cross-accession comparison. The final outputs are additionally prepared for public deposition with NCBI-compliant sequence headers and upload packaging. 
 
+In the end, we will have some summary metrics like this:
+
+
+
+![contacts](/figures/20260409_Primary_Final_Contacts_Histos.png)
+
+
+
 ## Puzzler Assembly
 
 End-to-end assembly: [puzzler](https://github.com/merondun/puzzler) 

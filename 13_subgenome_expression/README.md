@@ -2,7 +2,7 @@
 
 This section quantifies RNA-seq/Iso-Seq read expression against the combined HART063 A+B CDS transcriptome with Salmon, maps transcripts to *Morus* orthologs via RBH lookups, and summarizes per-gene subgenome A vs B expression bias across dN/dS-based gene categories.
 
-This corresponds to panel E:
+This corresponds to panel d:
 
 ![expression](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
 

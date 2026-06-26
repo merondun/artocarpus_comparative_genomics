@@ -1,10 +1,10 @@
-# Ancestral Reconstruction
+# 06_ancestral_reconstruction/
 
 This builds an N=5 comparative dataset (Artocarpus, Batocarpus, Morus, Ficus, Antiaris) by repeat-masking outgroups, lifting over gene annotations, and running OrthoFinder to infer orthogroups and a rooted species tree. Those outputs are then converted into AGORA inputs to reconstruct ancestral gene order/karyotypes (ancestral chromosomes/CARs) and generate karyotype-style plots plus CAR→extant chromosome mapping summaries.
 
-The output will be an karyotype reconstruction:
+The output will be an karyotype reconstruction from panel a:
 
-![agora](/figures/20260410_AGORA_Karyotypes.png)
+![agora](/figures/panels/03_subgenome_delim/20260520_panel_AGORA_BUSCO.png)
 ___
 
 | Genus              | Genes | Size (Mb) | Chrs |

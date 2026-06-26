@@ -6,7 +6,7 @@ In the end, can produce these summary figures:
 
 Repeat summaries:
 
-![repeats](/figures/20260410_repeats.png)
+![repeats](/figures/panels/02_repeats/20260410_repeats.png)
 
 Gene annotation: 
 
