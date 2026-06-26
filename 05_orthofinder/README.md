@@ -1,4 +1,4 @@
-# Orthofinder
+# 05_orthofinder/
 
 Run orthofinder on our n=10 Artocarpus accessions and our Batocarpus sample, using the protein data from above. 
 

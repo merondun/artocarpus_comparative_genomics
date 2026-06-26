@@ -1,4 +1,4 @@
-## kSRates: Ks distributions
+## 11_ksrates/
 
 This prepares cleaned CDS FASTAs and the ARtocarpus GFF3, then runs kSRates (in manual mode) to estimate paralog and ortholog Ks distributions across Artocarpus–Batocarpus–Morus and perform rate adjustment before generating plots. 
 

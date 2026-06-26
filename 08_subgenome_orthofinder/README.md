@@ -1,12 +1,10 @@
-## Subgenome-divided Orthofinder
+# 08_subgenome_orthofinder/ 
 
 This section continues the subgenome-specific evolution analyses, dealing with Artocarpus A/B (HART067), Batocarpus, and Morus.
 
 The results of this section correspond to panel B showing missing orthogroups across subgenomes:
 
 ![orthogroups](/figures/20260413_Annotation_Counts_Orthogroups.png)
-
-
 
 ____
 

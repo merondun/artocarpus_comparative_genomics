@@ -1,4 +1,4 @@
-## Subgenome-divided dNdS
+## 09_subgenome_dnds/
 
 This workflow splits CDS FASTAs into subgenome (A/B) partitions using chromosome haplotype lists, then identifies orthologous CDS sets via reciprocal best‑hit BLAST using *Morus* as the anchor reference. Per-gene multi-sample CDS alignments are built, filtered, and pruned to matching taxa, and HyPhy (MG94) is run on each gene to estimate branch-specific dN/dS across the tree.
 
@@ -6,7 +6,7 @@ Primary outputs:
 
 Panels a-c showing variation in selection across subgenomes:
 
-![subgenome](/figures/panels/05_subgenome_evolution/20260420_SubgenomeEvolution.png)
+![subgenome](/figures/20260420_SubgenomeEvolution.png)
 
 ____
 

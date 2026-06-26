@@ -217,3 +217,36 @@ done
 python -m jcvi.graphics.karyotype chrs.txt chr_layout.txt
 ```
 
+
+## Dotplots against HART063
+
+Using HART063 (A. camansi) as the reference, also produce dotplots:
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=1-00:00:00    
+#SBATCH --cpus-per-task=16
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+SAMPLE=$1
+
+module load apptainer
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper/wga/2604_HART063_Ref
+GENOMES=/project/coffea_pangenome/Artocarpus/Comparative_Paper/assemblies/unmasked
+mkdir -p pafs
+
+echo "WGA for ${SAMPLE}"
+mashmap -r ${GENOMES}/HART063.chr.fa -q ${GENOMES}/${SAMPLE}.chr.fa -t 10 -s 5000 --perc_identity 90 -o pafs/${SAMPLE}.paf 2> pafs/${SAMPLE}.mashmap.log
+Rscript ~/apptainer/paf2dotplot.R pafs/${SAMPLE}.paf -r 1e6 -m 1e4 -p 4 -c 1 --sort-by-refid --identity-lower-color 100
+
+```
+
+Submit: 
+
+```bash
+cat Samples.list  | xargs -I {} sbatch -J wga_{} 01_WGA_HART063Ref.sh {}
+zip wga_dotplots_hart063.zip pafs/*pdf
+```
+

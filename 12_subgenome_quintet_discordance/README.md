@@ -1,4 +1,4 @@
-## Quintets: Gene Discordance
+## **12_subgenome_quintet_discordance/**
 
 This builds 5-taxon ortholog quintets (Ficus–Morus–Batocarpus–ArtocarpusA–ArtocarpusB) via reciprocal best-hit BLAST, aligns each quintet, and infers gene trees (IQ-TREE), and summarizes gene-tree/species-tree discordance by topology counting.
 
@@ -6,7 +6,7 @@ Primary output:
 
 Panel b from:
 
-![ksrates](/figures/panels/04_subgenome_history/20260528_GeneTrees_BEAST_kS.png)
+![discordance](20260528_GeneTrees_BEAST_kS.png)
 
 
 

@@ -8,7 +8,7 @@ Sample metadata live in `samples.txt` (with ordering/plot aesthetics) and `Acces
 
 - [**01_qa_qc_genomescope/**](01_qa_qc_genomescope/) — read/QC and GenomeScope summaries for genome size/heterozygosity context.
 - [**02_genome_assembly/**](02_genome_assembly/) — assembly generation and post-processing notes/scripts.
-- [**03_annotation/**](03_annotation/) — Iso-Seq prep + eGAPx annotation, longest-isoform extraction, liftoff to other assemblies, standardized CDS/proteomes/GTF/GFF3 formatting.
+- [**03_annotation/**](03_annotation/) — Iso-Seq prep + eGAPx annotation & repeat annotation. Includes longest-isoform extraction, liftoff to other assemblies, standardized CDS/proteomes/GTF/GFF3 formatting, repeat and LTR variation.
 - [**04_whole_genome_alignments/**](04_whole_genome_alignments/) — nucmer-based WGA, filtering/merging into syntenic blocks, and karyotype-style visualization inputs.
 - [**05_orthofinder/**](05_orthofinder/) — orthogroup inference and species tree building.
 - [**06_ancestral_reconstruction/**](06_ancestral_reconstruction/) — ancestral chromosome/karyotype reconstructions and lineage fusion/fission summaries.

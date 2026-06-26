@@ -1,17 +1,6 @@
-# Genome Assembly
+# 02_genome_assembly/
 
-This section documents the end-to-end workflow used to produce chromosome-scale *Artocarpus* assemblies from PacBio HiFi (primary contig generation and polishing) and Hi-C (scaffolding and validation). Assemblies are generated in a consistent, reproducible way across all accessions using Puzzler, and then curated with a standardized post-processing suite: contaminant screening/removal (BlobToolKit/BlobTools), repeat annotation and harmonization across samples (EarlGrey + merged libraries), and assembly-level summaries for cross-accession comparison. The final outputs are additionally prepared for public deposition with NCBI-compliant sequence headers and upload packaging. 
-
-The primary outputs of this section are assemblies.... and repeat figures. 
-
-Assemblies & kmer histograms:
-
-![genomes](/figures/20260409_Primary_Final_Contacts_Histos.png)
-
-Repeat analyses:
-
-![repeats](/figures/20260410_repeats.png)
-___
+This section documents the end-to-end workflow used to produce chromosome-scale *Artocarpus* assemblies from PacBio HiFi (primary contig generation and polishing) and Hi-C (scaffolding and validation). Assemblies are generated in a consistent, reproducible way across all accessions using Puzzler, and then curated with a standardized post-processing suite: contaminant screening/removal (BlobToolKit/BlobTools). Assembly-level summaries for cross-accession comparison. The final outputs are additionally prepared for public deposition with NCBI-compliant sequence headers and upload packaging. 
 
 ## Puzzler Assembly
 
@@ -70,469 +59,7 @@ N97_50 had  bp removed across 0 scaffolds
 
 Some samples had almost 20mb of contaminant sequence! 
 
-## Repeat Annotation
 
-Annotate each genome with earlgrey v6.3.0
-
-```bash
-#!/bin/bash
-
-#SBATCH --time=14-00:00:00   
-#SBATCH --nodes=1  
-#SBATCH --cpus-per-task=20
-#SBATCH --mem=112Gb
-#SBATCH --partition=ceres
-#SBATCH --account=coffea_pangenome
-
-t=20
-
-#module load miniconda
-#source activate earlgrey
-#source activate eg6
-
-SAMPLE=$1
-WD=/project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/primary_asm
-
-mkdir -p ${WD}/EarlGrey_SampleLibrary
-cd ${WD}/EarlGrey_SampleLibrary
-
-FASTA="${WD}/${SAMPLE}.fa" 
-
-if [ ! -s ${WD}/EarlGrey_SampleLibrary/${SAMPLE}_EarlGrey/${SAMPLE}_summaryFiles/${SAMPLE}.softmasked.fasta ] && [ -s ${FASTA} ]; then
-    echo -e "\e[43m~~~~ Starting repeat annotation for ${SAMPLE} ~~~~\e[0m"
-    # Run earlgrey with eudicotyledons repeatmasker search time, generating soft-masked genome and run helitrons. 
-    earlGrey -r eudicotyledons -d yes -e yes -t ${t} -g ${FASTA} -s ${SAMPLE} -o ${WD}/EarlGrey_SampleLibrary
-
-else
-    echo -e "\e[42m~~~~ Skipping repeat annotation for ${SAMPLE}, already exists ~~~~\e[0m"
-fi 
-```
-
-And copy:
-
-```bash
-DIR=/90daydata/coffea_pangenome/scratch/repeats
-REP=/project/coffea_pangenome/Artocarpus/Comparative_Paper/repeats/inhouse_genomes_only_compiled/
-
-for SAMPLE in $(cat CompSamples.list) ; do 
-cp ${DIR}/${SAMPLE}_EarlGrey/${SAMPLE}_summaryFiles/* ${REP}/
-done 
-```
-
-Add accession to each output:
-
-```bash
-for SAMPLE in $(ls *.familyLevelCount.txt | sed 's/.familyLevelCount.txt//g'); do 
-echo "${SAMPLE}"
-awk -v s=${SAMPLE} '{OFS="\t"}{print $0, s}' ${SAMPLE}.familyLevelCount.txt > ${SAMPLE}.families.out
-awk -v s=${SAMPLE} '{OFS="\t"}{print $0, s}' ${SAMPLE}.highLevelCount.txt > ${SAMPLE}.summary.out
-awk -v s=${SAMPLE} '{OFS="\t"}{print $0, s}' ${SAMPLE}_divergence_summary_table.tsv > ${SAMPLE}.divergence.out
-done 
-
-mergem *families.out > Repeat_Families.txt
-mergem *summary.out > Repeat_Summaries.txt
-mergem *divergence.out > Divergence_Summaries.txt
-```
-
-### Repeat variation & plots
-
-- Summarize high‑level TE composition per assembly (stacked proportions from EarlGrey / RepeatMasker).
-- PGLS: `log(GSize) ~ log(Repeats)` (phylogeny‑corrected using species tree; λ estimated by ML).
-- PGLS: `young_frac_LTR ~ log(GSize)` (young_frac = bp‑weighted fraction of LTR bp below chosen Kimura cutoff).
-
-```R
-setwd('/project/coffea_pangenome/Artocarpus/Comparative_Paper/repeats/')
-library(tidyverse)
-library(RColorBrewer)
-library(ggpubr)
-library(meRo) #devtools::install_github('merondun/meRo')
-library(vegan)
-library(broom)
-
-# Add metadata information
-md <- read_tsv('/project/coffea_pangenome/Artocarpus/Comparative_Paper/samples.txt')
-
-##### High Level #####
-high_level <- read_tsv('Repeat_Summaries.txt') 
-names(high_level) <- c('Classification','Coverage','Count','Proportion','Gen','Distinct_Classifications','Accession')
-non_repeat <- high_level %>% 
-  group_by(Accession) %>% 
-  summarize(Proportion = 1-(sum(Proportion)),
-            Classification = "Non Repeat",
-            Coverage=NA,Count=NA,Gen=NA,Distinct_Classifications=NA)
-full_level <- rbind(high_level,non_repeat) %>% filter(!grepl('Anti|Ficus|Morus',Accession))
-fl <- left_join(full_level,md)
-ord <- md %>% dplyr::select(Accession,Group,`Accession Order`) %>% arrange(`Accession Order`)
-grpord <- md %>% dplyr::select(Group,`Accession Order`) %>% arrange(`Accession Order`) %>% dplyr::select(Group) %>% distinct
-fl$Accession <- factor(fl$Accession,levels=rev(ord$Accession))
-fl$Group <- factor(fl$Group,levels=grpord$Group)
-fl$Classification <- factor(fl$Classification,levels=c('Non Repeat','Unclassified','Other (Simple Repeat, Microsatellite, RNA)','DNA','Penelope','Rolling Circle','LTR','LINE','SINE'))
-cols <- fl %>% dplyr::select(Classification) %>% distinct %>% mutate(Color = brewer.pal(9,'Paired'))
-gcols <- md %>% dplyr::select(Group,Color,Shape) %>% distinct
-
-# ltr labs
-fl_labels <- fl %>%
-  filter(Classification == "LTR") %>%
-  mutate(
-    label = paste0(round(Proportion * 100, 1), "%"),
-    text_color = ifelse(Proportion > 0.08, "black", "black")
-  )
-
-
-# Plot landscape 
-all <- fl %>% 
-  mutate(Coverage = Coverage / 1e6) %>% 
-  pivot_longer(c(Proportion)) %>%
-  filter( !(name == 'Distinct_Classifications' & (Classification == 'Unclassified' | Classification == "Other (Simple Repeat, Microsatellite, RNA)")) ) %>% 
-  ggplot(aes(y = Accession, x = value, fill = Classification)) +
-  geom_bar(stat = 'identity', position = position_stack()) +
-  # add LTR percent labels
-  geom_text(
-    data = fl_labels,
-    aes(y = Accession, x = Proportion, label = label),
-    position = position_stack(vjust = 0.5),
-    color = fl_labels$text_color,
-    size = 2.5
-  ) +
-  theme_bw() +
-  facet_grid(Group ~ name, scales = 'free', space = 'free_y') +
-  scale_fill_manual(values = cols$Color, breaks = cols$Classification) +
-  theme(strip.text.y = element_text(angle = 0)) +
-  ylab('') + xlab('Distinct Classifications') +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
-
-all
-ggsave('~/symlinks/comp/figures/20260410_RepeatsHighLevelSummary.pdf',
-       all,dpi=300,height=4,width=6.5)
-
-
-#### 	PGLS ####
-# Significance genome size ~ LTRs 
-rep_df <- fl %>% filter(!grepl('Non Repeat',Classification)) %>% 
-  dplyr::rename(GSize = `Genome Size (Assembly, Mb)`,
-                phylo_order = `Accession Order`) %>% 
-  group_by(Accession,Group,phylo_order,GSize) %>% 
-  summarize(Repeats = sum(Coverage)/1e6)
-rep_df
-
-# Spearman correlation
-cor_res <- cor.test(
-  ~ Repeats + GSize,
-  data = rep_df,
-  method = "spearman"
-) %>% tidy()
-cor_res
-# # A tibble: 1 × 5
-# estimate statistic p.value method                          alternative
-# <dbl>     <dbl>   <dbl> <chr>                           <chr>      
-#   1    0.991      2.00       0 Spearman's rank correlation rho two.sided  
-
-# pgls
-library(caper)
-pgls_in <- rep_df %>% ungroup %>% dplyr::select(Accession,Repeats,GSize) %>% mutate( Accession = gsub("_","", Accession) ) %>% as.data.frame
-nwk <- read.tree('/project/coffea_pangenome/Artocarpus/Comparative_Paper/orthofinder/Liftover_N11/OrthoFinder/Results_Feb04/Species_Tree/SpeciesTree_rooted.txt')
-nwk$node.label <- NULL
-comp <- comparative.data(phy = nwk, data = pgls_in, names.col = Accession, vcv = TRUE, na.omit = FALSE )
-
-pgls_model <- pgls( log(GSize) ~ log(Repeats) , data = comp, lambda = "ML" ) 
-summary(pgls_model)
-
-pgls_line <- data.frame(
-  Repeats = pgls_in$Repeats,
-  fitted = fitted(pgls_model)
-)
-
-profile <- pgls.profile(pgls_model) 
-plot(profile)
-
-# Call:
-#   pgls(formula = log(GSize) ~ log(Repeats), data = comp, lambda = "ML")
-# 
-# Residuals:
-#   Min       1Q   Median       3Q      Max 
-# -0.18570 -0.06371  0.07070  0.14834  0.25227 
-# 
-# Branch length transformations:
-#   
-#   kappa  [Fix]  : 1.000
-# lambda [ ML]  : 0.951
-# lower bound : 0.000, p = 0.054709
-# upper bound : 1.000, p = 0.59073
-# 95.0% CI   : (NA, NA)
-# delta  [Fix]  : 1.000
-# 
-# Coefficients:
-#   Estimate Std. Error t value  Pr(>|t|)    
-# (Intercept)  1.271753   0.336977   3.774  0.004389 ** 
-#   log(Repeats) 0.854150   0.055247  15.461 8.672e-08 ***
-#   ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-# 
-# Residual standard error: 0.1539 on 9 degrees of freedom
-# Multiple R-squared: 0.9637,	Adjusted R-squared: 0.9597 
-# F-statistic:   239 on 1 and 9 DF,  p-value: 8.672e-08 
-
-# add fitted values aligned to rows used by the model
-pdat <- comp$data %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column(var = "Accession") %>%
-  mutate(
-    logG = log(GSize),
-    logR = log(Repeats),
-    fitted_logG = as.numeric(fitted(pgls_model))
-  ) %>% 
-  left_join(., 
-            md %>% dplyr::select(Accession,Group,Color,Shape) %>% mutate(Accession = gsub('_','',Accession)))
-
-# for a line, sort by x
-pdat_line <- pdat %>% arrange(logR)
-
-s <- summary(pgls_model)
-beta <- s$coefficients["log(Repeats)", "Estimate"]
-se   <- s$coefficients["log(Repeats)", "Std. Error"]
-pval <- s$coefficients["log(Repeats)", "Pr(>|t|)"]
-lam  <- pgls_model$param["lambda"]
-
-label_pgls <- sprintf("PGLS: b = %.3f ± %.3f\np = %.2e\nl = %.2f", beta, se, pval, lam)
-
-
-p_pgls <- ggplot(pdat, aes(x = logR, y = logG, fill = Group, shape = Group, label =Group)) +
-  geom_point(size = 2) +
-  geom_text_repel(size = 2, max.overlaps = Inf) +
-  geom_line(data = pdat_line, aes(x = logR, y = fitted_logG), inherit.aes = FALSE,
-            color = "blue", linewidth = 0.8) +
-  theme_bw(base_size = 8) +
-  scale_shape_manual(values=spcols$Shape,breaks=spcols$Group)+
-  scale_fill_manual(values=spcols$Color,breaks=spcols$Group)+
-  annotate("text", x = min(pdat$logR)+0.01, y = max(pdat$logG)-0.05, label = label_pgls,
-           hjust = 0, vjust = 0, size = 1.2) +
-  labs(
-    x = "log(Repeat masked bp)",
-    y = "log(Genome size (bp))"
-  ) +
-  theme(legend.position = "none")
-
-p_pgls
-
-ggsave('~/symlinks/comp/figures/20260410_RepeatsHighLevelSummary-Repeats-GenomeSize_PGLS.pdf',
-       p_pgls,dpi=300,height=3,width=2.75)
-
-###### Divergence Summaries ######
-t <- read_tsv('inhouse_only/Divergence_Summaries.txt')
-t <- t %>% dplyr::rename(Accession = HART001)
-tm <- left_join(t,md)
-tm$Accession <- factor(tm$Accession,levels=ord$Accession)
-tm$Group <- factor(tm$Group,levels=rev(grpord$Group))
-
-dom <- c("HART001","HART027")
-
-# helper build div_traits + run pgls for a given cutoff since we run few models sensitivity
-run_div_pgls <- function(young_cut_pct, tm, rep_df, nwk) {
-  young_cut <- young_cut_pct / 100
-  
-  div_traits <- tm %>%
-    filter(subclass %in% c("LTR","LINE","DNA")) %>%
-    mutate(domest = if_else(as.character(Accession) %in% dom, "domesticated", "wild")) %>%
-    group_by(Accession, domest, subclass) %>%
-    summarise(
-      te_mb = sum(total_bp, na.rm = TRUE) / 1e6,
-      young_mb = sum(total_bp[mean_div <= young_cut], na.rm = TRUE) / 1e6,
-      young_frac = young_mb / te_mb,
-      wmean_div = weighted.mean(mean_div, w = total_bp, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    pivot_wider(
-      names_from = subclass,
-      values_from = c(te_mb, young_mb, young_frac, wmean_div),
-      names_sep = "_"
-    ) %>%
-    mutate(Accession = gsub("_","", Accession)) %>%
-    left_join(
-      rep_df %>%
-        dplyr::select(Accession, GSize, Repeats) %>%
-        mutate(Accession = gsub("_","", Accession)),
-      by = "Accession"
-    ) %>%
-    as.data.frame()
-  
-  comp_div <- comparative.data(
-    phy = nwk,
-    data = div_traits,
-    names.col = "Accession",
-    vcv = TRUE,
-    na.omit = FALSE
-  )
-  
-  # ensure domest is a factor
-  comp_div$data$domest <- factor(comp_div$data$domest, levels = c("wild","domesticated"))
-  
-  m_dom <- pgls(wmean_div_LTR ~ domest, data = comp_div, lambda = "ML")
-  m_div <- pgls(young_frac_LTR ~ log(GSize), data = comp_div, lambda = "ML")
-  
-  list(div_traits = div_traits, comp_div = comp_div, m_dom = m_dom, m_div = m_div)
-}
-
-res10 <- run_div_pgls(young_cut_pct = 10, tm = tm, rep_df = rep_df, nwk = nwk)
-m_div <- res10$m_div
-
-summary(res10$m_div)
-
-# Call:
-#   pgls(formula = young_frac_LTR ~ log(GSize), data = comp_div, 
-#        lambda = "ML")
-# 
-# Residuals:
-#   Min       1Q   Median       3Q      Max 
-# -0.94304 -0.54048 -0.04824  0.37944  0.83333 
-# 
-# Branch length transformations:
-#   
-#   kappa  [Fix]  : 1.000
-# lambda [ ML]  : 1.000
-# lower bound : 0.000, p = 0.019737
-# upper bound : 1.000, p = 1    
-# 95.0% CI   : (0.393, NA)
-# delta  [Fix]  : 1.000
-# 
-# Coefficients:
-#   Estimate Std. Error t value Pr(>|t|)  
-# (Intercept) -4.11747    1.64560 -2.5021  0.03375 *
-#   log(GSize)   0.66154    0.25404  2.6041  0.02855 *
-#   ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-# 
-# Residual standard error: 0.6447 on 9 degrees of freedom
-# Multiple R-squared: 0.4297,	Adjusted R-squared: 0.3663 
-# F-statistic: 6.781 on 1 and 9 DF,  p-value: 0.02855 
-
-pdat_young <- res10$comp_div$data %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column(var = "Accession") %>%
-  mutate(
-    logG = log(GSize),
-    young = young_frac_LTR,
-    fitted_young = as.numeric(fitted(m_div))
-  )
-
-pdat_young_line <- pdat_young %>% arrange(logG)
-
-# label (β, p, λ)
-s <- summary(m_div)
-beta <- s$coefficients["log(GSize)", "Estimate"]
-se   <- s$coefficients["log(GSize)", "Std. Error"]
-pval <- s$coefficients["log(GSize)", "Pr(>|t|)"]
-lam  <- m_div$param["lambda"]
-
-label_pgls_young <- sprintf(
-  "PGLS: b = %.3f ± %.3f\np = %.2e\nl = %.2f\nyoung cutoff = %d%%",
-  beta, se, pval, lam, 10
-)
-
-# Plot 
-p_young <- ggplot(
-  pdat_young,
-  aes(x = logG, y = young, fill = Group, shape = Group, label = Accession)
-) +
-  geom_point(size = 2) +
-  geom_text_repel(size = 2, max.overlaps = Inf) +
-  geom_line(
-    data = pdat_young_line,
-    aes(x = logG, y = fitted_young),
-    inherit.aes = FALSE,
-    color = "blue",
-    linewidth = 0.8
-  ) +
-  theme_bw(base_size = 8) +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 2)) +  
-  scale_shape_manual(values = spcols$Shape, breaks = spcols$Group) +
-  scale_fill_manual(values = spcols$Color, breaks = spcols$Group) +
-  annotate(
-    "text",
-    x = min(pdat_young$logG, na.rm = TRUE) + 0.01,
-    y = max(pdat_young$young, na.rm = TRUE) - 0.02,
-    label = label_pgls_young,
-    hjust = 0, vjust = 1, size = 1.2
-  ) +
-  labs(
-    x = "log(Genome size (bp))",
-    y = "LTR young fraction (bp-weighted)"
-  ) +
-  theme(legend.position = "none")
-
-p_young
-
-ggsave('~/symlinks/comp/figures/20260410_LTRYoungFrac_vs_GSize_PGLS.pdf',
-       p_young, dpi=300, height=3, width=2.75)
-
-# domesticates?
-summary(res10$m_dom)
-
-# Call:
-#   pgls(formula = wmean_div_LTR ~ domest, data = comp_div, lambda = "ML")
-# 
-# Residuals:
-#   Min        1Q    Median        3Q       Max 
-# -0.109326 -0.050600  0.007363  0.046943  0.071145 
-# 
-# Branch length transformations:
-#   
-#   kappa  [Fix]  : 1.000
-# lambda [ ML]  : 1.000
-# lower bound : 0.000, p = 0.0017301
-# upper bound : 1.000, p = 1    
-# 95.0% CI   : (0.776, NA)
-# delta  [Fix]  : 1.000
-# 
-# Coefficients:
-#   Estimate Std. Error t value  Pr(>|t|)    
-# (Intercept)         0.1559046  0.0086090 18.1095 2.176e-08 ***
-#   domestdomesticated -0.0128897  0.0051162 -2.5194    0.0328 *  
-#   ---
-#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-# 
-# Residual standard error: 0.06965 on 9 degrees of freedom
-# Multiple R-squared: 0.4136,	Adjusted R-squared: 0.3484 
-# F-statistic: 6.347 on 1 and 9 DF,  p-value: 0.0328
-
-## Sensitivity loop over young_cut_pct values (5, 10, 15)
-sens_vals <- c(5, 10, 15)
-sens_out <- list()
-
-for (sens in sens_vals) {
-  
-  res <- run_div_pgls(young_cut_pct = sens, tm = tm, rep_df = rep_df, nwk = nwk)
-  
-  # extract stats: genome size effect on young_frac_LTR
-  sm_div <- summary(res$m_div)
-  gs_beta <- sm_div$coefficients["log(GSize)", "Estimate"]
-  gs_se   <- sm_div$coefficients["log(GSize)", "Std. Error"]
-  gs_p    <- sm_div$coefficients["log(GSize)", "Pr(>|t|)"]
-  gs_lam  <- res$m_div$param["lambda"]
-  
-  sens_out[[paste0(as.character(sens), "_2")]] <- tibble(
-    young_cut_pct = sens,
-
-    model = "young_frac_LTR ~ log(GSize)",
-    beta = gs_beta,
-    se = gs_se,
-    p = gs_p,
-    lambda = gs_lam
-  )
-}
-
-sens_tbl <- bind_rows(sens_out) %>%
-  arrange(model, young_cut_pct)
-
-sens_tbl
-# # A tibble: 3 × 6
-# young_cut_pct model                        beta    se      p lambda
-# <dbl> <chr>                       <dbl> <dbl>  <dbl>  <dbl>
-#   1             5 young_frac_LTR ~ log(GSize) 0.374 0.132 0.0196      1
-# 2            10 young_frac_LTR ~ log(GSize) 0.662 0.254 0.0285      1
-# 3            15 young_frac_LTR ~ log(GSize) 0.388 0.224 0.117       1
-
-
-```
 
 ## Gap & Telomere ID
 
@@ -607,12 +134,12 @@ tel <- read_tsv("all_samples.chr.telomeres.tsv", show_col_types = FALSE)
 tels <- tel %>% dplyr::select(sample, seqname = SeqName, chrlen = SeqLen, Tel5, Tel3)
 gap <- read_tsv("all_samples.chr.gaps.tsv", show_col_types = FALSE)
 gaps <- gap %>% group_by(sample,seqname) %>% summarize(seqlen = sum(seqlen),gaps =sum(gaplen))
-md <- read_tsv('~/symlinks/comp/samples.txt') %>% dplyr::select(Accession,`Accession Order`, Group,Color)
-ordg <- md %>% arrange(`Accession Order`) %>% distinct(Group)
-orda <- md %>% arrange(`Accession Order`) %>% distinct(Accession)
+md <- read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% dplyr::select(Accession,Accession_Order, Group,Color)
+ordg <- md %>% arrange(Accession_Order) %>% distinct(Group)
+orda <- md %>% arrange(Accession_Order) %>% distinct(Accession)
 
 df <- tels %>%
-  left_join(gaps, by = c("sample", "SeqName")) %>%              # join keys (adjust if your chrom column has a different name)
+  left_join(gaps) %>%              # join keys (adjust if your chrom column has a different name)
   tidyr::replace_na(list(gaps = 0)) %>%                         # only fill the gaps column
   left_join(md, by = c("sample" = "Accession")) %>%
   mutate(
@@ -652,6 +179,275 @@ tp <- dfs %>%
 tp
 
 ggsave('~/symlinks/comp/figures/20260409_AssemblyStats.pdf',tp,height=5,width=6.5)  
+
+```
+
+## Merqury Completeness/Quality
+
+Generate databases with HiFi and genome and estimate:
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=1-00:00:00   
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128Gb
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+module load miniconda
+source activate puzzler192
+module load merqury
+
+SAMPLE=$1
+WD=/project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies
+cd ${WD}
+
+export K=21
+export T=24
+
+mkdir -p ${WD}/${SAMPLE}/09_merqury
+cd ${WD}/${SAMPLE}/09_merqury
+
+# Build read meryl db
+HIFI=/project/coffea_pangenome/Artocarpus/Concatenated_Reads/${SAMPLE}.HiFi.fastq.gz
+meryl k=${K} threads=${T} count output ${SAMPLE}.reads.meryl ${HIFI}
+
+# BEFORE / AFTER
+awk '/^S/{print ">"$2;print $3}' ${WD}/${SAMPLE}/${SAMPLE}.hic.p_ctg.gfa > ${WD}/${SAMPLE}/pri.init.fa
+INIT="${WD}/${SAMPLE}/pri.init.fa"
+GENOME="${WD}/primary_asm/${SAMPLE}.fa"
+merqury.sh ${SAMPLE}.reads.meryl ${INIT} ${SAMPLE}.before
+merqury.sh ${SAMPLE}.reads.meryl ${GENOME} ${SAMPLE}.after
+```
+
+Extract:
+
+```bash
+for i in $(cat CompSamples.list); do cp ${i}/09_merqury/*after*complete* ${i}/09_merqury/*after.qv merqury_spectra/; done
+```
+
+## Estimate heterozygosity
+
+```bash
+#!/bin/bash
+
+#SBATCH --time=4-00:00:00    
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=128Gb
+#SBATCH --partition=ceres
+#SBATCH --account=coffea_pangenome
+
+module load apptainer
+module load miniconda
+#mamba create -n snp_array python bbtools minimap2 samtools bcftools glnexus seqkit r-tidyverse r-ape r-ggtree r-treeio bedtools iqtree admixture bioconductor-snprelate r-ranger r-randomforest r-tidymodels mosdepth 
+source activate snp_array
+
+SAMPLE=${1:?Missing SAMPLE argument}
+WD=/project/coffea_pangenome/Artocarpus/Comparative_Paper
+HIFI=/project/coffea_pangenome/Artocarpus/Concatenated_Reads/${SAMPLE}.HiFi.fastq.gz
+GENOME=${WD}/assemblies/unmasked/${SAMPLE}.fa
+
+t=48
+
+# subsample based on dpeth to achieve 20x 
+X=20
+G=$(awk -v s=$SAMPLE '$1==s{print $2*1e6}' ${WD}/het_estimate/genome_sizes.tsv)  # Assembly Mb
+BASES=$(printf "%.0f" "$(echo "$X * $G" | bc -l)")
+mkdir -p \
+  ${WD}/het_estimate/02_subset_reads \
+  ${WD}/het_estimate/03_bams \
+  ${WD}/het_estimate/04_vcfs \
+  ${WD}/het_estimate/05_mosdepth \
+  ${WD}/het_estimate/06_callable \
+  ${WD}/het_estimate/07_stats
+
+# # Subset reads so that we have roughly equal inputs
+# echo "Subsetting Reads for: ${SAMPLE}"
+bbduk.sh in=${HIFI} out=${WD}/het_estimate/02_subset_reads/${SAMPLE}.20gb.fastq.gz maxbasesout=${BASES}
+
+# Align, with more relaxed parameters since jackfruit is ~20 MY diverged
+echo "Aligning Reads for: ${SAMPLE}"
+minimap2 -ax map-hifi -t ${t} \
+    -R @RG\\tID:${SAMPLE}\\tPL:PACBIO\\tLB:${SAMPLE}\\tSM:${SAMPLE} ${GENOME} \
+    ${WD}/het_estimate/02_subset_reads/${SAMPLE}.20gb.fastq.gz | \
+    samtools view -F 4 -bS - | \
+    samtools sort -@ ${t} -o ${WD}/het_estimate/03_bams/${SAMPLE}.sorted.bam
+samtools index ${WD}/het_estimate/03_bams/${SAMPLE}.sorted.bam
+
+# Call variants, just use diploid deep variant model since we will ignore dosage 
+# apptainer pull deepvariant_latest.sif docker://google/deepvariant:latest
+echo "Calling SNPs for: ${SAMPLE}"
+DEEPVAR="/project/coffea_pangenome/Breadfruit_SNP_Array/containers/deepvariant_gh1060.sif"
+apptainer exec \
+    -B /project/coffea_pangenome:/project/coffea_pangenome \
+    ${DEEPVAR} run_deepvariant \
+    --make_examples_extra_args='small_model_call_multiallelics=false' \
+    --model_type PACBIO \
+    --ref ${GENOME} \
+    --reads ${WD}/het_estimate/03_bams/${SAMPLE}.sorted.bam \
+    --output_vcf ${WD}/het_estimate/04_vcfs/${SAMPLE}.pt.vcf.gz \
+    --output_gvcf ${WD}/het_estimate/04_vcfs/${SAMPLE}.pt.gvcf.gz \
+    --sample_name ${SAMPLE} \
+    --num_shards ${t} \
+    --postprocess_cpus ${t}
+tabix -f -p vcf ${WD}/het_estimate/04_vcfs/${SAMPLE}.pt.vcf.gz
+
+# identify callable regions MQ >=20 dp 0.5x-2x expected 
+echo "Computing per-base depth (mosdepth) for: ${SAMPLE}"
+BAM=${WD}/het_estimate/03_bams/${SAMPLE}.sorted.bam
+MDIR=${WD}/het_estimate/05_mosdepth/${SAMPLE}
+mkdir -p ${MDIR}
+
+mosdepth -t ${t} -Q 20 ${MDIR}/${SAMPLE} ${BAM}
+
+# estimate expected depth from mosdepth summary (total/mean)
+MEAN_DP=$(awk '$1=="total"{print $4}' ${MDIR}/${SAMPLE}.mosdepth.summary.txt)
+if [ -z "${MEAN_DP}" ]; then
+  echo "ERROR: could not parse mean depth from mosdepth summary: ${MDIR}/${SAMPLE}.mosdepth.summary.txt" >&2
+  exit 1
+fi
+
+MIN_DP=$(python3 - <<PY
+m=float("${MEAN_DP}")
+print(max(1, int(m*0.5)))
+PY
+)
+
+MAX_DP=$(python3 - <<PY
+m=float("${MEAN_DP}")
+print(int(m*2.0))
+PY
+)
+
+echo "Mean depth=${MEAN_DP}; callable depth range=[${MIN_DP},${MAX_DP}] (MAPQ>=20)" \
+  | tee ${WD}/het_estimate/07_stats/${SAMPLE}.depth_thresholds.txt
+
+# Build callable intervals from per-base depths:
+CALLABLE_BED=${WD}/het_estimate/06_callable/${SAMPLE}.callable.MQ20.DP${MIN_DP}-${MAX_DP}.bed
+zcat ${MDIR}/${SAMPLE}.per-base.bed.gz | \
+  awk -v min=${MIN_DP} -v max=${MAX_DP} 'BEGIN{OFS="\t"} $4>=min && $4<=max {print $1,$2,$3}' | \
+  bedtools merge -i - > ${CALLABLE_BED}
+
+CALLABLE_BP=$(awk '{s+=$3-$2} END{print s+0}' ${CALLABLE_BED})
+echo -e "${SAMPLE}\t${CALLABLE_BP}" > ${WD}/het_estimate/07_stats/${SAMPLE}.callable_bp.tsv
+
+### heterozygosity time 
+echo "Counting heterozygous SNPs in callable regions for: ${SAMPLE}"
+VCF=${WD}/het_estimate/04_vcfs/${SAMPLE}.pt.vcf.gz
+MIN_GQ=20
+MIN_VCF_DP=10
+
+HET_SNPS=$(bcftools view \
+  -R ${CALLABLE_BED} \
+  -f PASS \
+  -v snps \
+  -i "GT='het' && GQ>=${MIN_GQ} && DP>=${MIN_VCF_DP}" \
+  ${VCF} | \
+  bcftools view -H | wc -l)
+
+# heterozygosity per bp (pi-like SNP density proxy)
+HET_PER_BP=$(python3 - <<PY
+het=int("${HET_SNPS}")
+bp=int("${CALLABLE_BP}")
+print("nan" if bp==0 else het/bp)
+PY
+)
+
+printf "%s\t%s\t%s\t%s\n" \
+  "${SAMPLE}" \
+  "${CALLABLE_BP}" \
+  "${HET_SNPS}" \
+  "${HET_PER_BP}" \
+  > ${WD}/het_estimate/07_stats/${SAMPLE}.het_density.tsv
+
+echo "Done: ${SAMPLE} callable_bp=${CALLABLE_BP} het_snps=${HET_SNPS} het_per_bp=${HET_PER_BP}"
+echo -e "${SAMPLE}\t${CALLABLE_BP}\t${HET_SNPS}\t${HET_PER_BP}" > ${WD}/het_estimate/07_stats/${SAMPLE}.output.tsv
+```
+
+Plot both the merqury estimates and the heterozygosity:
+
+Plot:
+
+```R
+setwd('/project/coffea_pangenome/Artocarpus/Assemblies/20250101_JustinAssemblies/merqury_spectra')
+library(tidyverse)
+library(readr)
+library(stringr)
+library(patchwork)
+library(ggtext)
+
+md <- read_tsv('~/artocarpus_comparative_genomics/samples.txt') %>% dplyr::select(Accession,Group,Color,Shape,ord=Accession_Order)
+qv_files <- list.files('.', pattern = "\\.after\\.qv$", full.names = TRUE)
+comp_files <- list.files('.', pattern = "\\.after\\.completeness\\.stats$", full.names = TRUE)
+
+qv <- map_dfr(qv_files, \(f) {
+  x <- read_tsv(f, col_names = c("Accession","Errors","Bases","QV","ErrRate"), show_col_types = FALSE)
+  x %>% select(Accession, QV)
+})
+
+comp <- map_dfr(comp_files, \(f) {
+  txt <- read.table(f)
+  tibble(Accession = txt$V1,
+         completeness = txt$V5)
+})
+
+# import het
+het <- read_tsv('~/symlinks/comp/het_estimate/20260415_Het_Estimates.tsv', col_names = F)
+names(het) <- c('Accession','CallableBP','HeterozygousSNPs','HetRate')
+df <- full_join(comp, qv, by = "Accession") %>%
+  arrange(Accession) %>%
+  left_join(het) %>% 
+  left_join(md) %>% 
+  mutate(
+    ID_md = paste0("*", Group, "*<br>(", Accession, ")"),
+    ID_md = factor(ID_md, levels = ID_md[order(ord)])
+  ) %>% 
+  dplyr::select(-CallableBP, -HeterozygousSNPs)
+
+dp <- df %>% 
+  pivot_longer(c(QV, HetRate, completeness)) %>% 
+  mutate(
+    label = case_when(
+      name == "HetRate" ~ scales::label_number(accuracy = 0.0001)(value),
+      TRUE              ~ scales::label_number(accuracy = 0.1)(value)
+    )
+  ) %>%
+  ggplot(aes(x = ID_md, y = value, fill = Group, label = label)) +
+  geom_col(width = 0.9) +
+  geom_label(vjust = 0.5, alpha = 0.8, fill = "white",size=2.5) +
+  scale_fill_manual(values = md$Color, breaks = md$Group) +
+  facet_grid(name ~ ., scales = "free") +
+  theme_bw(base_size = 10) + xlab('')+ylab('')+
+  theme(
+    legend.position='none',
+    axis.text.x = ggtext::element_markdown(angle=45,vjust=1,hjust=1)
+  )
+dp
+
+ggsave("~/symlinks/comp/figures/20260415_GenomeMerqury_Het.pdf", dp, width = 5, height = 5, dpi = 300)
+
+# correlation?
+pear <- cor.test(df$completeness, df$HetRate, method = "pearson")
+pear
+
+ct <- cor.test(df$completeness, df$HetRate, method = "pearson")
+lab <- sprintf("Pearson r = %.3f\np = %.2g", unname(ct$estimate), ct$p.value)
+
+dp2 <- ggplot(df, aes(x = completeness, y = HetRate)) +
+  geom_smooth(aes(group = 1), method = "lm", se = TRUE,
+              linewidth = 0.6, color = "grey30") +
+  geom_point(aes(fill = Group, shape = Group), size = 2.5) +
+  scale_fill_manual(values = md$Color, breaks = md$Group) +
+  scale_shape_manual(values = md$Shape, breaks = md$Group) +
+  annotate("text", x = Inf, y = Inf, label = lab, hjust = 1, vjust = 1.5) +
+  coord_cartesian(clip = "off") +
+  theme_bw(base_size = 10) +
+  theme(plot.margin = margin(5.5, 25, 5.5, 5.5)) +
+  labs(x = "Completeness (%)", y = "HetRate")
+dp2
+ggsave("~/symlinks/comp/figures/20260415_Correlation_MerqHet.pdf", dp2, width = 5.5, height = 3.5, dpi = 300)
+
 
 ```
 

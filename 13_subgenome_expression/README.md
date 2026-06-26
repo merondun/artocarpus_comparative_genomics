@@ -1,4 +1,4 @@
-## Subgenome-specific Expression
+## 13_subgenome_expression/
 
 This section quantifies RNA-seq/Iso-Seq read expression against the combined HART063 A+B CDS transcriptome with Salmon, maps transcripts to *Morus* orthologs via RBH lookups, and summarizes per-gene subgenome A vs B expression bias across dN/dS-based gene categories.
 

@@ -1,4 +1,4 @@
-## Subgenome-divided BEAST
+## 10_subgenome_beast/
 
 This workflow repeats the general process from [subgenome_divided_dnds](/09_subgenome_dnds/) except it includes *Ficus carica* as a more distant outgroup. 
 

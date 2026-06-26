@@ -1,4 +1,4 @@
-# QC QA Basic Read Stats
+# 01_qa_qc_genomescope/
 
 This section captures QC/QA metrics used to validate inputs and track assembly readiness across all accessions. We summarize HiFi read length distributions, estimate genome-wide heterozygosity from GenomeScope2 outputs, and apply read deduplication when warranted. 
 
