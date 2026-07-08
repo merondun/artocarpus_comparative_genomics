@@ -1,4 +1,4 @@
-## 09_subgenome_dnds/
+# 09_subgenome_dnds/
 
 This workflow splits CDS FASTAs into subgenome (A/B) partitions using chromosome haplotype lists, then identifies orthologous CDS sets via reciprocal best‑hit BLAST using *Morus* as the anchor reference. Per-gene multi-sample CDS alignments are built, filtered, and pruned to matching taxa, and HyPhy (MG94) is run on each gene to estimate branch-specific dN/dS across the tree.
 
@@ -440,7 +440,7 @@ awk -v OFS='\t' '
 ' hyphy_out/*.tsv > Node_dNdS_20260406.tsv
 ```
 
-#### Summarize & Plot Tree 
+## Summarize & Plot Tree 
 
 Treads the per-branch HyPhy dN/dS results, assigns branches to subgenome A/B (shared vs unique gene sets), filters unstable estimates, and then compares selection signals between A and B using Fisher tests and tree-based visualizations.
 
@@ -862,9 +862,7 @@ write.table(top_puri_uniq,file='TopGenes_Puri_20260420.tsv',quote=F,sep='\t',row
 
 ```
 
-
-
-#### Plot Functions
+### Plot Functions
 
 First, use interproscan to identify the function of the Morus genes (which are used as anchors):
 
